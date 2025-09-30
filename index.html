@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>Renombrar + Marca de Agua — PWA</title>
+  <style>
+    :root{
+      --bg:#0f172a; --card:#111827; --muted:#94a3b8; --fg:#e5e7eb;
+      --accent:#22c55e; --accent-2:#3b82f6; --danger:#ef4444;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,#0b1024,#0f172a);color:var(--fg)}
+    .wrap{max-width:1100px;margin:24px auto;padding:16px}
+    h1{font-size:clamp(1.25rem,2.5vw,1.8rem);margin:0 0 12px;display:flex;align-items:center;gap:10px}
+    p.small{color:var(--muted);margin:0 0 16px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .card{background:rgba(17,24,39,.7);backdrop-filter: blur(6px);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    label{display:block;font-size:.9rem;margin:10px 0 6px 2px;color:#cbd5e1}
+    input[type="text"],input[type="number"],input[type="file"],select{width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(148,163,184,.25);background:#0b1220;color:var(--fg);outline:none}
+    input[type="range"]{width:100%}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+    button{cursor:pointer;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,#1e293b,#0f172a);color:var(--fg);padding:10px 14px;border-radius:12px;font-weight:600;box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+    button.primary{background:linear-gradient(180deg,#22c55e,#15803d)}
+    button.secondary{background:linear-gradient(180deg,#3b82f6,#1d4ed8)}
+    button.danger{background:linear-gradient(180deg,#ef4444,#b91c1c)}
+    .install{background:linear-gradient(180deg,#f59e0b,#b45309)}
+    .preview{width:100%;display:block;max-height:70vh;border-radius:12px;background:#000;object-fit:contain}
+    .kv{display:flex;justify-content:space-between;gap:8px;color:#9ca3af;font-size:.85rem;margin-top:6px}
+    .chip{padding:4px 8px;border-radius:999px;background:#0b1220;border:1px solid rgba(148,163,184,.2);color:#cbd5e1}
+    footer{margin-top:18px;color:#94a3b8;font-size:.85rem}
+    .hint{font-size:.8rem;color:#93c5fd}
+    @media (max-width:980px){.grid{grid-template-columns:1fr}}
+  </style>
+  <!-- Estos enlaces se completan dinámicamente para mantener el archivo único -->
+  <link id="manifestLink" rel="manifest" href="#">
+  <link id="appleTouchIcon" rel="apple-touch-icon">
+</head>
+<body>
+  <div class="wrap">
+    <h1>
+      Renombrar + Marca de Agua (PWA, 100% local)
+      <button id="installBtn" class="install" style="display:none">Instalar</button>
+    </h1>
+    <p class="small">Puedes <b>instalar</b> esta app. Debe servirse por <b>https://</b> o <b>localhost</b> (requisito de PWA en iOS/Android/desktop).</p>
+
+    <div class="grid">
+      <section class="card">
+        <label for="file">Imagen</label>
+        <input id="file" type="file" accept="image/*" />
+
+        <div class="row">
+          <div>
+            <label for="wmText">Texto de marca de agua</label>
+            <input id="wmText" type="text" placeholder="Ej: Perforación" />
+          </div>
+          <div>
+            <label for="position">Posición</label>
+            <select id="position">
+              <option value="br">Abajo-Derecha</option>
+              <option value="bl">Abajo-Izquierda</option>
+              <option value="tr">Arriba-Derecha</option>
+              <option value="tl">Arriba-Izquierda</option>
+              <option value="c">Centro</option>
+              <option value="d">Diagonal</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="fontSize">Tamaño (px)</label>
+            <input id="fontSize" type="number" value="48" min="8" max="400" />
+          </div>
+          <div>
+            <label for="opacity">Opacidad: <span id="opacityVal">0.25</span></label>
+            <input id="opacity" type="range" min="0" max="1" step="0.01" value="0.25" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="margin">Margen (px)</label>
+            <input id="margin" type="number" value="32" min="0" max="400" />
+          </div>
+          <div>
+            <label for="rotation">Rotación (iPhone/EXIF)</label>
+            <select id="rotation">
+              <option value="0">0° (auto)</option>
+              <option value="90">90°</option>
+              <option value="180">180°</option>
+              <option value="270">270°</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="maxW">Máximo ancho (px) <span class="hint">(0 = original)</span></label>
+            <input id="maxW" type="number" value="0" min="0" max="8000" />
+          </div>
+          <div>
+            <label for="format">Formato de salida</label>
+            <select id="format">
+              <option value="image/jpeg">JPG (recomendado)</option>
+              <option value="image/png">PNG</option>
+              <option value="image/webp">WEBP</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="quality">Calidad JPG/WEBP: <span id="qualityVal">0.85</span></label>
+            <input id="quality" type="range" min="0.5" max="1" step="0.01" value="0.85" />
+          </div>
+          <div>
+            <label for="filename">Nombre de archivo (sin extensión)</label>
+            <input id="filename" type="text" placeholder="Ej: Perforacion" />
+          </div>
+        </div>
+
+        <div class="btns">
+          <button class="secondary" id="btnPreview">Previsualizar</button>
+          <button class="primary" id="btnProcess">Procesar y descargar</button>
+          <button class="danger" id="btnClear">Limpiar</button>
+        </div>
+
+        <p class="small" style="margin-top:10px">Tip: si la foto sale girada, usa la rotación. La PWA funciona offline tras abrirla/instalarla una vez.</p>
+      </section>
+
+      <section class="card">
+        <canvas id="canvas" class="preview" aria-label="Vista previa"></canvas>
+        <div class="kv">
+          <div class="chip" id="infoDim">—</div>
+          <div class="chip" id="infoSize">—</div>
+          <div class="chip" id="infoName">—</div>
+        </div>
+        <div class="btns">
+          <a id="downloadLink" download style="display:none"><button class="primary">Descargar imagen</button></a>
+        </div>
+      </section>
+    </div>
+
+    <footer>Archivo único. Manifest e iconos + Service Worker se generan en runtime.</footer>
+  </div>
+
+  <!-- PWA: manifest + SW generados al vuelo -->
+  <script>
+    (function(){
+      function makeIcon(size){
+        const c=document.createElement('canvas'); c.width=c.height=size; const x=c.getContext('2d');
+        x.fillStyle='#0f172a'; x.fillRect(0,0,size,size);
+        const g=x.createLinearGradient(0,0,size,size); g.addColorStop(0,'#22c55e'); g.addColorStop(1,'#3b82f6');
+        x.fillStyle=g; x.beginPath(); x.arc(size/2,size/2,size*0.44,0,Math.PI*2); x.fill();
+        x.fillStyle='#fff'; x.font=`${Math.round(size*0.28)}px system-ui, sans-serif`; x.textAlign='center'; x.textBaseline='middle';
+        x.fillText('WM', size/2, size/2);
+        return c.toDataURL('image/png');
+      }
+      const icon192 = makeIcon(192);
+      const icon512 = makeIcon(512);
+
+      const manifest = {
+        name: 'Renombrar + Marca de Agua',
+        short_name: 'MarcaAgua',
+        description: 'Renombra y aplica marcas de agua a fotos, local y offline.',
+        start_url: '.',
+        display: 'standalone',
+        background_color: '#0f172a',
+        theme_color: '#0f172a',
+        icons: [{ src: icon192, sizes:'192x192', type:'image/png' }, { src: icon512, sizes:'512x512', type:'image/png' }]
+      };
+      const murl = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type:'application/json'}));
+      document.getElementById('manifestLink').href = murl;
+      document.getElementById('appleTouchIcon').href = icon192;
+
+      const swCode = `
+        const CACHE_NAME='wm-pwa-v1';
+        const CORE=self.registration.scope?[self.registration.scope]:['/'];
+        self.addEventListener('install',e=>{
+          e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting()));
+        });
+        self.addEventListener('activate',e=>{
+          e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))) .then(()=>self.clients.claim()));
+        });
+        self.addEventListener('fetch',e=>{
+          const req=e.request;
+          if(req.mode==='navigate'||(req.method==='GET'&&req.headers.get('accept')?.includes('text/html'))){
+            e.respondWith(fetch(req).then(r=>{const copy=r.clone(); caches.open(CACHE_NAME).then(c=>c.put(req,copy)); return r;})
+              .catch(()=>caches.match(req).then(r=>r||caches.match('/'))));
+            return;
+          }
+          if(req.method==='GET'){
+            e.respondWith(caches.match(req).then(cached=>{
+              const fetchP=fetch(req).then(net=>{caches.open(CACHE_NAME).then(c=>c.put(req,net.clone())); return net;}).catch(()=>cached);
+              return cached||fetchP;
+            }));
+          }
+        });
+      `;
+      if('serviceWorker' in navigator){
+        const swUrl=URL.createObjectURL(new Blob([swCode],{type:'text/javascript'}));
+        navigator.serviceWorker.register(swUrl).catch(console.error);
+      }
+
+      let deferredPrompt=null;
+      const installBtn=document.getElementById('installBtn');
+      window.addEventListener('beforeinstallprompt',(e)=>{
+        e.preventDefault(); deferredPrompt=e; installBtn.style.display='inline-flex';
+      });
+      installBtn?.addEventListener('click', async ()=>{
+        if(!deferredPrompt) return;
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt=null; installBtn.style.display='none';
+      });
+    })();
+  </script>
+
+  <!-- LÓGICA DE LA APP -->
+  <script>
+    const $=(id)=>document.getElementById(id);
+    const fileEl=$("file"), wmTextEl=$("wmText"), positionEl=$("position"), fontSizeEl=$("fontSize"),
+          opacityEl=$("opacity"), opacityVal=$("opacityVal"), marginEl=$("margin"),
+          rotationEl=$("rotation"), maxWEl=$("maxW"), formatEl=$("format"),
+          qualityEl=$("quality"), qualityVal=$("qualityVal"), filenameEl=$("filename"),
+          btnPreview=$("btnPreview"), btnProcess=$("btnProcess"), btnClear=$("btnClear"),
+          canvas=$("canvas"), ctx=canvas.getContext("2d"),
+          infoDim=$("infoDim"), infoSize=$("infoSize"), infoName=$("infoName"),
+          downloadLink=$("downloadLink");
+    opacityEl.addEventListener('input',()=>opacityVal.textContent=opacityEl.value);
+    qualityEl.addEventListener('input',()=>qualityVal.textContent=qualityEl.value);
+
+    let loadedImg=null;
+
+    fileEl.addEventListener('change', async (e)=>{
+      const f=e.target.files?.[0]; if(!f) return;
+      const url=URL.createObjectURL(f); const img=new Image();
+      await new Promise((res,rej)=>{img.onload=res; img.onerror=rej; img.src=url;});
+      loadedImg={image:img,width:img.naturalWidth,height:img.naturalHeight,name:f.name,size:f.size};
+      infoDim.textContent=`${img.naturalWidth}×${img.naturalHeight}px`;
+      infoSize.textContent=humanSize(f.size);
+      infoName.textContent=f.name;
+      if(!filenameEl.value){ filenameEl.value=`${baseName(f.name)}-wm`; }
+      drawPreview();
+    });
+
+    btnPreview.addEventListener('click',(e)=>{e.preventDefault(); drawPreview();});
+    btnProcess.addEventListener('click', async (e)=>{
+      e.preventDefault();
+      if(!loadedImg){ alert('Primero elige una imagen.'); return; }
+      await drawPreview(true);
+      const mime=formatEl.value, q=Number(qualityEl.value);
+      const isJpeg=mime.includes('jpeg')||mime.includes('jpg');
+      const safeName=sanitize(filenameEl.value||baseName(loadedImg.name)+'-wm');
+      const ext=mime.split('/')[1].replace('jpeg','jpg');
+      const blob=await new Promise(res=>canvas.toBlob(res,mime,isJpeg?q:undefined));
+      const dl=URL.createObjectURL(blob);
+      downloadLink.href=dl; downloadLink.download=`${safeName}.${ext}`;
+      downloadLink.style.display='inline-block';
+      downloadLink.querySelector('button').textContent=`Descargar ${safeName}.${ext}`;
+      setTimeout(()=>URL.revokeObjectURL(dl),60000);
+    });
+    btnClear.addEventListener('click',(e)=>{
+      e.preventDefault(); fileEl.value=''; loadedImg=null; ctx.clearRect(0,0,canvas.width,canvas.height);
+      infoDim.textContent='—'; infoSize.textContent='—'; infoName.textContent='—';
+      filenameEl.value=''; downloadLink.style.display='none';
+    });
+
+    function baseName(name){ const dot=name.lastIndexOf('.'); return dot>-1?name.slice(0,dot):name; }
+    function sanitize(str){ return str.trim().replace(/\\s+/g,'_').replace(/[^a-zA-Z0-9_\\-\\.]/g,''); }
+    function humanSize(bytes){ const u=['B','KB','MB','GB']; let i=0,n=bytes; while(n>=1024&&i<u.length-1){n/=1024;i++;} return `${n.toFixed(1)} ${u[i]}`; }
+
+    async function drawPreview(final=false){
+      if(!loadedImg) return;
+      const img=loadedImg.image, rot=Number(rotationEl.value);
+      let targetW=img.naturalWidth, targetH=img.naturalHeight;
+      const maxW=Number(maxWEl.value||0);
+      if(maxW>0 && targetW>maxW){ const s=maxW/targetW; targetW=Math.round(targetW*s); targetH=Math.round(targetH*s); }
+      const needsSwap=rot===90||rot===270;
+      canvas.width=needsSwap?targetH:targetW; canvas.height=needsSwap?targetW:targetH;
+
+      ctx.save();
+      if(rot!==0){
+        if(rot===90){ctx.translate(canvas.width,0); ctx.rotate(Math.PI/2);}
+        if(rot===180){ctx.translate(canvas.width,canvas.height); ctx.rotate(Math.PI);}
+        if(rot===270){ctx.translate(0,canvas.height); ctx.rotate(3*Math.PI/2);}
+      }
+      ctx.drawImage(img,0,0,targetW,targetH);
+      ctx.restore();
+
+      const text=wmTextEl.value||'';
+      if(text){
+        const opacity=Number(opacityEl.value), size=Number(fontSizeEl.value), margin=Number(marginEl.value), pos=positionEl.value;
+        ctx.save(); ctx.globalAlpha=opacity; ctx.fillStyle='#000';
+        ctx.font=`600 ${size}px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial`;
+        ctx.textBaseline='bottom';
+        const metrics=ctx.measureText(text), textW=metrics.width, textH=size, pad=Math.max(6,Math.round(size*0.18));
+
+        function drawPill(x,y){
+          const r=Math.round(size*0.35), w=textW+pad*2, h=textH+pad*2, rx=Math.min(r,h/2);
+          roundRect(ctx,x,y-h,w,h,rx); ctx.fill();
+          ctx.fillStyle='#fff'; ctx.globalAlpha=Math.min(1,opacity+0.25);
+          ctx.fillText(text,x+pad,y-pad);
+        }
+
+        if(pos==='d'){
+          ctx.translate(canvas.width/2,canvas.height/2);
+          ctx.rotate(-Math.atan(canvas.height/canvas.width));
+          const repGap=textW+200; ctx.globalAlpha=opacity*0.8; ctx.fillStyle='#000';
+          for(let x=-canvas.width; x<canvas.width; x+=repGap){
+            ctx.save(); ctx.translate(x,0); ctx.globalAlpha=opacity*0.5; ctx.font=`700 ${size}px ui-sans-serif`;
+            ctx.fillText(text,-textW/2,size/2); ctx.restore();
+          }
+          ctx.restore();
+        }else{
+          let x=margin, y=canvas.height-margin;
+          if(pos==='br'){ x=canvas.width - margin - (textW+pad*2); y=canvas.height - margin; }
+          if(pos==='bl'){ x=margin; y=canvas.height - margin; }
+          if(pos==='tr'){ x=canvas.width - margin - (textW+pad*2); y=margin + textH + pad*2; }
+          if(pos==='tl'){ x=margin; y=margin + textH + pad*2; }
+          if(pos==='c'){ x=(canvas.width - (textW+pad*2))/2; y=(canvas.height + (textH+pad*2))/2; }
+          drawPill(x,y);
+        }
+        ctx.restore();
+      }
+
+      infoDim.textContent=`${canvas.width}×${canvas.height}px`;
+      const mime=formatEl.value, isJpeg=mime.includes('jpeg')||mime.includes('jpg'), q=Number(qualityEl.value);
+      const blob=await new Promise(res=>canvas.toBlob(res,mime,isJpeg?q:undefined));
+      infoSize.textContent=humanSize(blob.size);
+      infoName.textContent=(filenameEl.value||baseName(loadedImg?.name||'foto'))+'.'+mime.split('/')[1].replace('jpeg','jpg');
+    }
+
+    function roundRect(ctx,x,y,w,h,r){
+      ctx.beginPath();
+      ctx.moveTo(x+r,y);
+      ctx.arcTo(x+w,y,x+w,y+h,r);
+      ctx.arcTo(x+w,y+h,x,y+h,r);
+      ctx.arcTo(x,y+h,x,y,r);
+      ctx.arcTo(x,y,x+w,y,r);
+      ctx.closePath();
+    }
+  </script>
+</body>
+</html>
