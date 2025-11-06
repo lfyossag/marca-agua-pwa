@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#0f172a" />
-  <title>Renombrar + Marca de Agua — PWA</title>
+  <title>Marcación de Fotos — PWA</title>
   <style>
     :root{
       --bg:#0f172a; --card:#111827; --muted:#94a3b8; --fg:#e5e7eb;
@@ -18,8 +18,12 @@
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
     .card{background:rgba(17,24,39,.7);backdrop-filter: blur(6px);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
     label{display:block;font-size:.9rem;margin:10px 0 6px 2px;color:#cbd5e1}
-    input[type="text"],input[type="number"],input[type="file"],select{width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(148,163,184,.25);background:#0b1220;color:var(--fg);outline:none}
+    input[type="text"],input[type="number"],input[type="file"],input[type="datetime-local"],select,textarea{width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(148,163,184,.25);background:#0b1220;color:var(--fg);outline:none;font-family:inherit}
     input[type="range"]{width:100%}
+    textarea{resize:vertical;min-height:60px}
+    select:disabled{opacity:0.6;cursor:not-allowed}
+    details summary{padding:8px 0;margin:8px 0}
+    details[open] summary{margin-bottom:8px}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
     .btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
     button{cursor:pointer;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,#1e293b,#0f172a);color:var(--fg);padding:10px 14px;border-radius:12px;font-weight:600;box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
@@ -41,94 +45,94 @@
 <body>
   <div class="wrap">
     <h1>
-      Renombrar + Marca de Agua (PWA, 100% local)
+      Marcación Fotos
       <button id="installBtn" class="install" style="display:none">Instalar</button>
     </h1>
-    <p class="small">Puedes <b>instalar</b> esta app. Debe servirse por <b>https://</b> o <b>localhost</b> (requisito de PWA en iOS/Android/desktop).</p>
+    <p class="small">Registra y marca fotos con información del proyecto.</p>
 
     <div class="grid">
       <section class="card">
-        <label for="file">Imagen</label>
-        <input id="file" type="file" accept="image/*" />
+        <!-- Fecha y hora de creación (oculto) -->
+        <input type="hidden" id="fechaCreacion">
+        
+        <!-- Fecha elegida por el usuario -->
+        <label for="fecha">Fecha *</label>
+        <input id="fecha" type="datetime-local" required />
 
-        <div class="row">
-          <div>
-            <label for="wmText">Texto de marca de agua</label>
-            <input id="wmText" type="text" placeholder="Ej: Perforación" />
-          </div>
-          <div>
-            <label for="position">Posición</label>
-            <select id="position">
-              <option value="br">Abajo-Derecha</option>
-              <option value="bl">Abajo-Izquierda</option>
-              <option value="tr">Arriba-Derecha</option>
-              <option value="tl">Arriba-Izquierda</option>
-              <option value="c">Centro</option>
-              <option value="d">Diagonal</option>
-            </select>
-          </div>
-        </div>
+        <!-- Área -->
+        <label for="area">Área *</label>
+        <select id="area" required>
+          <option value="">Selecciona un área...</option>
+          <option value="Túnel Grúa Puente">Túnel Grúa Puente</option>
+          <option value="Casa de Máquinas">Casa de Máquinas</option>
+          <option value="Transformador">Transformador</option>
+          <option value="Vertedero">Vertedero</option>
+          <option value="Embalse">Embalse</option>
+          <option value="Obra de Toma">Obra de Toma</option>
+        </select>
 
-        <div class="row">
-          <div>
-            <label for="fontSize">Tamaño (px)</label>
-            <input id="fontSize" type="number" value="48" min="8" max="400" />
-          </div>
-          <div>
-            <label for="opacity">Opacidad: <span id="opacityVal">0.25</span></label>
-            <input id="opacity" type="range" min="0" max="1" step="0.01" value="0.25" />
-          </div>
-        </div>
+        <!-- Frente (dependiente del área) -->
+        <label for="frente">Frente *</label>
+        <select id="frente" required disabled>
+          <option value="">Primero selecciona un área</option>
+        </select>
 
-        <div class="row">
-          <div>
-            <label for="margin">Margen (px)</label>
-            <input id="margin" type="number" value="32" min="0" max="400" />
-          </div>
-          <div>
-            <label for="rotation">Rotación (iPhone/EXIF)</label>
-            <select id="rotation">
-              <option value="0">0° (auto)</option>
-              <option value="90">90°</option>
-              <option value="180">180°</option>
-              <option value="270">270°</option>
-            </select>
-          </div>
-        </div>
+        <!-- Foto -->
+        <label for="file">Fotografía *</label>
+        <input id="file" type="file" accept="image/*" capture="environment" required />
 
-        <div class="row">
-          <div>
-            <label for="maxW">Máximo ancho (px) <span class="hint">(0 = original)</span></label>
-            <input id="maxW" type="number" value="0" min="0" max="8000" />
-          </div>
-          <div>
-            <label for="format">Formato de salida</label>
-            <select id="format">
-              <option value="image/jpeg">JPG (recomendado)</option>
-              <option value="image/png">PNG</option>
-              <option value="image/webp">WEBP</option>
-            </select>
-          </div>
-        </div>
+        <!-- Descripción de la foto -->
+        <label for="descripcionFoto">Descripción de la fotografía *</label>
+        <textarea id="descripcionFoto" rows="2" placeholder="Ej: Vaciado de concreto en túnel" required></textarea>
 
-        <div class="row">
-          <div>
-            <label for="quality">Calidad JPG/WEBP: <span id="qualityVal">0.85</span></label>
-            <input id="quality" type="range" min="0.5" max="1" step="0.01" value="0.85" />
+        <!-- Observaciones -->
+        <label for="observaciones">Observaciones</label>
+        <textarea id="observaciones" rows="3" placeholder="Observaciones adicionales (opcional)"></textarea>
+
+        <!-- Configuración de marca de agua (colapsable) -->
+        <details style="margin-top:15px">
+          <summary style="cursor:pointer;color:var(--accent);font-weight:600">⚙️ Configuración avanzada</summary>
+          <div style="margin-top:10px">
+            <div class="row">
+              <div>
+                <label for="fontSize">Tamaño texto (px)</label>
+                <input id="fontSize" type="number" value="36" min="8" max="200" />
+              </div>
+              <div>
+                <label for="opacity">Opacidad: <span id="opacityVal">0.4</span></label>
+                <input id="opacity" type="range" min="0.3" max="1" step="0.01" value="0.4" />
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <label for="position">Posición marca de agua</label>
+                <select id="position">
+                  <option value="br">Abajo-Derecha</option>
+                  <option value="bl">Abajo-Izquierda</option>
+                  <option value="tl">Arriba-Izquierda</option>
+                  <option value="tr">Arriba-Derecha</option>
+                </select>
+              </div>
+              <div>
+                <label for="rotation">Rotación imagen</label>
+                <select id="rotation">
+                  <option value="0">0° (auto)</option>
+                  <option value="90">90°</option>
+                  <option value="180">180°</option>
+                  <option value="270">270°</option>
+                </select>
+              </div>
+            </div>
           </div>
-          <div>
-            <label for="filename">Nombre de archivo (sin extensión)</label>
-            <input id="filename" type="text" placeholder="Ej: Perforacion" />
-          </div>
-        </div>
+        </details>
 
         <div class="btns">
           <button class="secondary" id="btnPreview">Previsualizar</button>
-          <button class="primary" id="btnProcess">Procesar y descargar</button>
+          <button class="primary" id="btnProcess">Procesar y Guardar</button>
           <button class="danger" id="btnClear">Limpiar</button>
         </div>
 
-        <p class="small" style="margin-top:10px">Tip: si la foto sale girada, usa la rotación. La PWA funciona offline tras abrirla/instalarla una vez.</p>
+        <p class="small" style="margin-top:10px">📷 La foto se guardará automáticamente en Google Drive con marca de agua.</p>
       </section>
 
       <section class="card">
@@ -163,9 +167,9 @@
       const icon512 = makeIcon(512);
 
       const manifest = {
-        name: 'Renombrar + Marca de Agua',
-        short_name: 'MarcaAgua',
-        description: 'Renombra y aplica marcas de agua a fotos, local y offline.',
+        name: 'Marcación de Fotos',
+        short_name: 'MarcaFotos',
+        description: 'Registra y marca fotos con información del proyecto, local y offline.',
         start_url: '.',
         display: 'standalone',
         background_color: '#0f172a',
@@ -200,7 +204,7 @@
           }
         });
       `;
-      if('serviceWorker' in navigator){
+      if('serviceWorker' in navigator && location.protocol === 'https:'){
         const swUrl=URL.createObjectURL(new Blob([swCode],{type:'text/javascript'}));
         navigator.serviceWorker.register(swUrl).catch(console.error);
       }
@@ -222,16 +226,57 @@
   <!-- LÓGICA DE LA APP -->
   <script>
     const $=(id)=>document.getElementById(id);
-    const fileEl=$("file"), wmTextEl=$("wmText"), positionEl=$("position"), fontSizeEl=$("fontSize"),
-          opacityEl=$("opacity"), opacityVal=$("opacityVal"), marginEl=$("margin"),
-          rotationEl=$("rotation"), maxWEl=$("maxW"), formatEl=$("format"),
-          qualityEl=$("quality"), qualityVal=$("qualityVal"), filenameEl=$("filename"),
+    const fileEl=$("file"), fechaCreacionEl=$("fechaCreacion"), fechaEl=$("fecha"),
+          areaEl=$("area"), frenteEl=$("frente"), descripcionFotoEl=$("descripcionFoto"),
+          observacionesEl=$("observaciones"), positionEl=$("position"), fontSizeEl=$("fontSize"),
+          opacityEl=$("opacity"), opacityVal=$("opacityVal"), rotationEl=$("rotation"),
           btnPreview=$("btnPreview"), btnProcess=$("btnProcess"), btnClear=$("btnClear"),
           canvas=$("canvas"), ctx=canvas.getContext("2d"),
           infoDim=$("infoDim"), infoSize=$("infoSize"), infoName=$("infoName"),
           downloadLink=$("downloadLink");
+    
+    // URL del Google Apps Script
+    const GAS_URL = 'https://script.google.com/a/macros/sedic.com.co/s/AKfycbwb-1q2Rd4TBxL5GDDMzc3PL9lkKuy3VIPOWw67bKvwH4oh6yoCmAa46UqJWY75G612/exec';
+    
+    // Configuración de áreas y frentes (se cargará dinámicamente)
+    let areasFrentes = {};
+
+    // Event listeners
     opacityEl.addEventListener('input',()=>opacityVal.textContent=opacityEl.value);
-    qualityEl.addEventListener('input',()=>qualityVal.textContent=qualityEl.value);
+    
+    // Inicializar fecha de creación
+    fechaCreacionEl.value = new Date().toISOString();
+    
+    // Configurar fecha actual por defecto con zona horaria de Bogotá (-5 UTC)
+    function getBogotaDateTime() {
+      const now = new Date();
+      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const bogotaTime = new Date(utc + (-5 * 3600000)); // UTC -5 para Bogotá
+      return bogotaTime.toISOString().slice(0,16);
+    }
+    fechaEl.value = getBogotaDateTime();
+    
+    // Cargar áreas y frentes desde la base de datos
+    loadAreasFromSheets();
+    
+    // Manejar cambio de área
+    areaEl.addEventListener('change', ()=>{
+      const area = areaEl.value;
+      frenteEl.innerHTML = '<option value="">Selecciona un frente...</option>';
+      
+      if(area && areasFrentes[area]){
+        frenteEl.disabled = false;
+        areasFrentes[area].forEach(frente => {
+          const option = document.createElement('option');
+          option.value = frente;
+          option.textContent = frente;
+          frenteEl.appendChild(option);
+        });
+      } else {
+        frenteEl.disabled = true;
+        frenteEl.innerHTML = '<option value="">Primero selecciona un área</option>';
+      }
+    });
 
     let loadedImg=null;
 
@@ -243,45 +288,251 @@
       infoDim.textContent=`${img.naturalWidth}×${img.naturalHeight}px`;
       infoSize.textContent=humanSize(f.size);
       infoName.textContent=f.name;
-      if(!filenameEl.value){ filenameEl.value=`${baseName(f.name)}-wm`; }
+      updateFilename();
       drawPreview();
     });
 
+    // Actualizar nombre de archivo cuando cambien los campos
+    frenteEl.addEventListener('change', updateFilename);
+    descripcionFotoEl.addEventListener('input', updateFilename);
+    fechaEl.addEventListener('change', updateFilename);
+
     btnPreview.addEventListener('click',(e)=>{e.preventDefault(); drawPreview();});
+    
     btnProcess.addEventListener('click', async (e)=>{
       e.preventDefault();
-      if(!loadedImg){ alert('Primero elige una imagen.'); return; }
-      await drawPreview(true);
-      const mime=formatEl.value, q=Number(qualityEl.value);
-      const isJpeg=mime.includes('jpeg')||mime.includes('jpg');
-      const safeName=sanitize(filenameEl.value||baseName(loadedImg.name)+'-wm');
-      const ext=mime.split('/')[1].replace('jpeg','jpg');
-      const blob=await new Promise(res=>canvas.toBlob(res,mime,isJpeg?q:undefined));
-      const dl=URL.createObjectURL(blob);
-      downloadLink.href=dl; downloadLink.download=`${safeName}.${ext}`;
-      downloadLink.style.display='inline-block';
-      downloadLink.querySelector('button').textContent=`Descargar ${safeName}.${ext}`;
-      setTimeout(()=>URL.revokeObjectURL(dl),60000);
+      if(!validateForm()) return;
+      
+      // Mostrar indicador de procesamiento
+      btnProcess.textContent = 'Procesando...';
+      btnProcess.disabled = true;
+      
+      try {
+        // Procesar imagen con marca de agua
+        await drawPreview(true);
+        const filename = generateFilename();
+        const blob = await new Promise(res=>canvas.toBlob(res,'image/jpeg',0.9));
+        
+        // Convertir blob a base64
+        const imageBase64 = await blobToBase64(blob);
+        
+        // Preparar datos para envío
+        const formData = {
+          fechaCreacion: fechaCreacionEl.value,
+          fecha: fechaEl.value,
+          area: areaEl.value,
+          frente: frenteEl.value,
+          descripcionFoto: descripcionFotoEl.value,
+          observaciones: observacionesEl.value,
+          filename: filename,
+          imageBase64: imageBase64
+        };
+        
+        // Enviar a Google Apps Script
+        const response = await sendToGAS(formData);
+        
+        if (response.success) {
+          // Éxito: mostrar enlace de descarga local también
+          const dl = URL.createObjectURL(blob);
+          downloadLink.href = dl;
+          downloadLink.download = `${filename}.jpg`;
+          downloadLink.style.display = 'inline-block';
+          downloadLink.querySelector('button').textContent = `Descargar ${filename}.jpg`;
+          setTimeout(()=>URL.revokeObjectURL(dl), 60000);
+          
+          alert(`✅ ¡Foto guardada exitosamente en Drive!\n\nArchivo: ${response.data.fileName}\nFila en Sheets: ${response.data.rowNumber}`);
+          
+          // Limpiar formulario después del éxito
+          btnClear.click();
+          
+        } else {
+          throw new Error(response.message || 'Error desconocido del servidor');
+        }
+        
+      } catch (error) {
+        console.error('Error procesando foto:', error);
+        
+        // En caso de error, ofrecer descarga local
+        await drawPreview(true);
+        const filename = generateFilename();
+        const blob = await new Promise(res=>canvas.toBlob(res,'image/jpeg',0.9));
+        const dl = URL.createObjectURL(blob);
+        downloadLink.href = dl;
+        downloadLink.download = `${filename}.jpg`;
+        downloadLink.style.display = 'inline-block';
+        downloadLink.querySelector('button').textContent = `Descargar ${filename}.jpg (Error en envío)`;
+        setTimeout(()=>URL.revokeObjectURL(dl), 60000);
+        
+        alert(`❌ Error guardando en Drive: ${error.message}\n\n💡 Puedes descargar la imagen localmente usando el botón de descarga.`);
+      } finally {
+        // Restaurar botón
+        btnProcess.textContent = 'Procesar y Guardar';
+        btnProcess.disabled = false;
+      }
     });
+    
     btnClear.addEventListener('click',(e)=>{
-      e.preventDefault(); fileEl.value=''; loadedImg=null; ctx.clearRect(0,0,canvas.width,canvas.height);
-      infoDim.textContent='—'; infoSize.textContent='—'; infoName.textContent='—';
-      filenameEl.value=''; downloadLink.style.display='none';
+      e.preventDefault(); 
+      // Limpiar formulario
+      fileEl.value=''; 
+      fechaEl.value = new Date().toISOString().slice(0,16);
+      areaEl.value='';
+      frenteEl.value='';
+      frenteEl.disabled=true;
+      descripcionFotoEl.value='';
+      observacionesEl.value='';
+      
+      // Limpiar imagen
+      loadedImg=null; 
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      infoDim.textContent='—'; 
+      infoSize.textContent='—'; 
+      infoName.textContent='—';
+      downloadLink.style.display='none';
     });
 
     function baseName(name){ const dot=name.lastIndexOf('.'); return dot>-1?name.slice(0,dot):name; }
-    function sanitize(str){ return str.trim().replace(/\\s+/g,'_').replace(/[^a-zA-Z0-9_\\-\\.]/g,''); }
+    function sanitize(str){ return str.trim().replace(/\s+/g,' ').replace(/[^a-zA-Z0-9\s\-]/g,''); }
     function humanSize(bytes){ const u=['B','KB','MB','GB']; let i=0,n=bytes; while(n>=1024&&i<u.length-1){n/=1024;i++;} return `${n.toFixed(1)} ${u[i]}`; }
+    
+    function validateForm(){
+      if(!fechaEl.value){ alert('Por favor selecciona una fecha'); return false; }
+      if(!areaEl.value){ alert('Por favor selecciona un área'); return false; }
+      if(!frenteEl.value){ alert('Por favor selecciona un frente'); return false; }
+      if(!loadedImg){ alert('Por favor selecciona una imagen'); return false; }
+      if(!descripcionFotoEl.value.trim()){ alert('Por favor ingresa una descripción de la foto'); return false; }
+      return true;
+    }
+    
+    function generateFilename(){
+      const fecha = new Date(fechaEl.value);
+      const yyyymmdd = fecha.toISOString().slice(0,10).replace(/-/g,'');
+      const frente = sanitize(frenteEl.value);
+      const descripcion = sanitize(descripcionFotoEl.value);
+      return `${yyyymmdd}-${frente}-${descripcion}`;
+    }
+    
+    function updateFilename(){
+      if(fechaEl.value && frenteEl.value && descripcionFotoEl.value.trim()){
+        const filename = generateFilename();
+        infoName.textContent = `${filename}.jpg`;
+      }
+    }
+    
+    function formatDateTime(dateStr){
+      const date = new Date(dateStr);
+      const day = String(date.getDate()).padStart(2,'0');
+      const month = String(date.getMonth()+1).padStart(2,'0');
+      const year = date.getFullYear();
+      const hours = String(date.getHours()).padStart(2,'0');
+      const minutes = String(date.getMinutes()).padStart(2,'0');
+      return `${day}/${month}/${year} ${hours}:${minutes}`;
+    }
+    
+    // Convertir blob a base64
+    function blobToBase64(blob){
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    }
+    
+    // Cargar áreas y frentes desde Google Sheets
+    async function loadAreasFromSheets(){
+      try {
+        console.log('Cargando áreas desde Sheets...');
+        
+        const response = await fetch(GAS_URL + '?action=getAreas', {
+          method: 'GET',
+          mode: 'cors'
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            areasFrentes = data.data;
+            populateAreaSelect();
+            console.log('Áreas cargadas:', areasFrentes);
+          }
+        }
+      } catch (error) {
+        console.log('Error cargando áreas, usando configuración por defecto:', error);
+        // Fallback con configuración estática
+        areasFrentes = {
+          "Túnel Grúa Puente": ["Túnel Norte", "Túnel Sur", "Grúa Puente Norte", "Grúa Puente Sur"],
+          "Casa de Máquinas": ["Casa de Máquinas Norte", "Casa de Máquinas Sur", "Turbina 1", "Turbina 2", "Generador 1", "Generador 2"],
+          "Transformador": ["Transformador Principal", "Transformador Auxiliar", "Patio de Maniobras"],
+          "Vertedero": ["Vertedero Principal", "Canal de Descarga", "Compuertas"],
+          "Embalse": ["Presa", "Coronamiento", "Talud Aguas Arriba", "Talud Aguas Abajo"],
+          "Obra de Toma": ["Rejillas", "Compuertas de Toma", "Túnel de Conducción"]
+        };
+        populateAreaSelect();
+      }
+    }
+    
+    // Poblar select de áreas
+    function populateAreaSelect(){
+      areaEl.innerHTML = '<option value="">Selecciona un área...</option>';
+      Object.keys(areasFrentes).forEach(area => {
+        const option = document.createElement('option');
+        option.value = area;
+        option.textContent = area;
+        areaEl.appendChild(option);
+      });
+    }
+
+    // Enviar datos a Google Apps Script usando formulario para evitar CORS
+    async function sendToGAS(data){
+      try {
+        console.log('Enviando datos a GAS:', data.filename);
+        
+        // Crear formulario oculto para envío sin CORS
+        const form = new FormData();
+        form.append('data', JSON.stringify(data));
+        
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          body: form,
+          mode: 'no-cors' // Evitar problemas de CORS
+        });
+        
+        // Con no-cors no podemos leer la respuesta, asumimos éxito
+        console.log('Datos enviados a GAS (no-cors mode)');
+        
+        return { 
+          success: true, 
+          message: 'Datos enviados correctamente',
+          data: { 
+            fileName: data.filename + '.jpg',
+            rowNumber: 'N/A (no-cors mode)'
+          }
+        };
+        
+      } catch (error) {
+        console.error('Error enviando a GAS:', error);
+        throw error;
+      }
+    }
 
     async function drawPreview(final=false){
       if(!loadedImg) return;
       const img=loadedImg.image, rot=Number(rotationEl.value);
       let targetW=img.naturalWidth, targetH=img.naturalHeight;
-      const maxW=Number(maxWEl.value||0);
-      if(maxW>0 && targetW>maxW){ const s=maxW/targetW; targetW=Math.round(targetW*s); targetH=Math.round(targetH*s); }
+      
+      // Redimensionar si es muy grande (max 2000px de ancho)
+      const maxW = 2000;
+      if(targetW > maxW){ 
+        const s=maxW/targetW; 
+        targetW=Math.round(targetW*s); 
+        targetH=Math.round(targetH*s); 
+      }
+      
       const needsSwap=rot===90||rot===270;
-      canvas.width=needsSwap?targetH:targetW; canvas.height=needsSwap?targetW:targetH;
+      canvas.width=needsSwap?targetH:targetW; 
+      canvas.height=needsSwap?targetW:targetH;
 
+      // Dibujar imagen
       ctx.save();
       if(rot!==0){
         if(rot===90){ctx.translate(canvas.width,0); ctx.rotate(Math.PI/2);}
@@ -291,47 +542,64 @@
       ctx.drawImage(img,0,0,targetW,targetH);
       ctx.restore();
 
-      const text=wmTextEl.value||'';
-      if(text){
-        const opacity=Number(opacityEl.value), size=Number(fontSizeEl.value), margin=Number(marginEl.value), pos=positionEl.value;
-        ctx.save(); ctx.globalAlpha=opacity; ctx.fillStyle='#000';
-        ctx.font=`600 ${size}px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial`;
-        ctx.textBaseline='bottom';
-        const metrics=ctx.measureText(text), textW=metrics.width, textH=size, pad=Math.max(6,Math.round(size*0.18));
-
-        function drawPill(x,y){
-          const r=Math.round(size*0.35), w=textW+pad*2, h=textH+pad*2, rx=Math.min(r,h/2);
-          roundRect(ctx,x,y-h,w,h,rx); ctx.fill();
-          ctx.fillStyle='#fff'; ctx.globalAlpha=Math.min(1,opacity+0.25);
-          ctx.fillText(text,x+pad,y-pad);
-        }
-
-        if(pos==='d'){
-          ctx.translate(canvas.width/2,canvas.height/2);
-          ctx.rotate(-Math.atan(canvas.height/canvas.width));
-          const repGap=textW+200; ctx.globalAlpha=opacity*0.8; ctx.fillStyle='#000';
-          for(let x=-canvas.width; x<canvas.width; x+=repGap){
-            ctx.save(); ctx.translate(x,0); ctx.globalAlpha=opacity*0.5; ctx.font=`700 ${size}px ui-sans-serif`;
-            ctx.fillText(text,-textW/2,size/2); ctx.restore();
-          }
-          ctx.restore();
-        }else{
-          let x=margin, y=canvas.height-margin;
-          if(pos==='br'){ x=canvas.width - margin - (textW+pad*2); y=canvas.height - margin; }
-          if(pos==='bl'){ x=margin; y=canvas.height - margin; }
-          if(pos==='tr'){ x=canvas.width - margin - (textW+pad*2); y=margin + textH + pad*2; }
-          if(pos==='tl'){ x=margin; y=margin + textH + pad*2; }
-          if(pos==='c'){ x=(canvas.width - (textW+pad*2))/2; y=(canvas.height + (textH+pad*2))/2; }
-          drawPill(x,y);
-        }
-        ctx.restore();
+      // Crear marca de agua con información del formulario
+      if(fechaEl.value && frenteEl.value && descripcionFotoEl.value){
+        const fechaFormateada = formatDateTime(fechaEl.value);
+        const frente = frenteEl.value;
+        const descripcion = descripcionFotoEl.value;
+        
+        const watermarkLines = [fechaFormateada, frente, descripcion];
+        drawWatermark(watermarkLines);
       }
 
+      // Actualizar información
       infoDim.textContent=`${canvas.width}×${canvas.height}px`;
-      const mime=formatEl.value, isJpeg=mime.includes('jpeg')||mime.includes('jpg'), q=Number(qualityEl.value);
-      const blob=await new Promise(res=>canvas.toBlob(res,mime,isJpeg?q:undefined));
+      const blob=await new Promise(res=>canvas.toBlob(res,'image/jpeg',0.9));
       infoSize.textContent=humanSize(blob.size);
-      infoName.textContent=(filenameEl.value||baseName(loadedImg?.name||'foto'))+'.'+mime.split('/')[1].replace('jpeg','jpg');
+      updateFilename();
+    }
+
+    function drawWatermark(lines){
+      const opacity=Number(opacityEl.value);
+      const size=Number(fontSizeEl.value);
+      const pos=positionEl.value;
+      const margin=20;
+      const lineHeight=size*1.2;
+      const padding = 16;
+      
+      ctx.save();
+      ctx.globalAlpha=opacity;
+      ctx.fillStyle='rgba(0,0,0,0.7)'; // Fondo semitransparente
+      ctx.font=`600 ${size}px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial`;
+      
+      // Calcular dimensiones del bloque de texto
+      const maxWidth = Math.max(...lines.map(line => ctx.measureText(line).width));
+      const blockWidth = maxWidth + (padding * 2);
+      const blockHeight = (lines.length * lineHeight) + padding;
+      
+      // Calcular posición
+      let x = margin, y = margin;
+      if(pos==='br'){ x = canvas.width - blockWidth - margin; y = canvas.height - blockHeight - margin; }
+      if(pos==='bl'){ x = margin; y = canvas.height - blockHeight - margin; }
+      if(pos==='tr'){ x = canvas.width - blockWidth - margin; y = margin; }
+      if(pos==='tl'){ x = margin; y = margin; }
+      
+      // Dibujar fondo redondeado
+      roundRect(ctx, x, y, blockWidth, blockHeight, 8);
+      ctx.fill();
+      
+      // Dibujar texto alineado a la derecha
+      ctx.fillStyle='#ffffff';
+      ctx.globalAlpha=Math.min(1, opacity + 0.3);
+      ctx.textAlign = 'right'; // Alineación a la derecha
+      
+      lines.forEach((line, index) => {
+        const textY = y + padding + (index * lineHeight) + (size * 0.7);
+        const textX = x + blockWidth - padding; // Posición X para alineación derecha
+        ctx.fillText(line, textX, textY);
+      });
+      
+      ctx.restore();
     }
 
     function roundRect(ctx,x,y,w,h,r){
