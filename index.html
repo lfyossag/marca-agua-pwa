@@ -130,6 +130,7 @@
           <button class="secondary" id="btnPreview">Previsualizar</button>
           <button class="primary" id="btnProcess">Procesar y Guardar</button>
           <button class="danger" id="btnClear">Limpiar</button>
+          <button class="secondary" id="btnTestGAS" style="font-size:0.8em">🔧 Test GAS</button>
         </div>
 
         <p class="small" style="margin-top:10px">📷 La foto se guardará automáticamente en Google Drive con marca de agua.</p>
@@ -296,6 +297,35 @@
     frenteEl.addEventListener('change', updateFilename);
     descripcionFotoEl.addEventListener('input', updateFilename);
     fechaEl.addEventListener('change', updateFilename);
+    
+    // Botón de prueba del GAS
+    $("btnTestGAS").addEventListener('click', async (e) => {
+      e.preventDefault();
+      console.log('🧪 === INICIANDO PRUEBA DEL GAS ===');
+      
+      // Probar conexión básica
+      try {
+        console.log('1️⃣ Probando conexión básica al GAS...');
+        const response = await fetch(GAS_URL, {method: 'GET'});
+        console.log('📡 Respuesta básica:', response.status, response.statusText);
+      } catch (error) {
+        console.error('❌ Error conexión básica:', error);
+      }
+      
+      // Probar función getAreas
+      try {
+        console.log('2️⃣ Probando función getAreas...');
+        await loadAreasFromSheets();
+      } catch (error) {
+        console.error('❌ Error en loadAreasFromSheets:', error);
+      }
+      
+      // Mostrar estado actual
+      console.log('3️⃣ Estado actual de areasFrentes:', areasFrentes);
+      console.log('4️⃣ Opciones en select área:', areaEl.options.length);
+      
+      alert('Prueba completada. Revisa la consola (F12) para ver los resultados.');
+    });
 
     btnPreview.addEventListener('click',(e)=>{e.preventDefault(); drawPreview();});
     
@@ -441,45 +471,66 @@
     // Cargar áreas y frentes desde Google Sheets
     async function loadAreasFromSheets(){
       try {
-        console.log('Cargando áreas desde Sheets...');
+        console.log('🔄 Intentando cargar áreas desde Sheets...');
+        console.log('📡 URL del GAS:', GAS_URL + '?action=getAreas');
         
         const response = await fetch(GAS_URL + '?action=getAreas', {
           method: 'GET',
           mode: 'cors'
         });
         
+        console.log('📦 Respuesta recibida:', response.status, response.statusText);
+        
         if (response.ok) {
           const data = await response.json();
-          if (data.success) {
+          console.log('📄 Datos parseados:', data);
+          
+          if (data.success && data.data) {
             areasFrentes = data.data;
             populateAreaSelect();
-            console.log('Áreas cargadas:', areasFrentes);
+            console.log('✅ Áreas cargadas exitosamente:', Object.keys(areasFrentes));
+            return;
+          } else {
+            console.warn('⚠️ Respuesta no exitosa:', data.message);
           }
+        } else {
+          console.warn('⚠️ Respuesta HTTP no OK:', response.status);
         }
       } catch (error) {
-        console.log('Error cargando áreas, usando configuración por defecto:', error);
-        // Fallback con configuración estática
-        areasFrentes = {
-          "Túnel Grúa Puente": ["Túnel Norte", "Túnel Sur", "Grúa Puente Norte", "Grúa Puente Sur"],
-          "Casa de Máquinas": ["Casa de Máquinas Norte", "Casa de Máquinas Sur", "Turbina 1", "Turbina 2", "Generador 1", "Generador 2"],
-          "Transformador": ["Transformador Principal", "Transformador Auxiliar", "Patio de Maniobras"],
-          "Vertedero": ["Vertedero Principal", "Canal de Descarga", "Compuertas"],
-          "Embalse": ["Presa", "Coronamiento", "Talud Aguas Arriba", "Talud Aguas Abajo"],
-          "Obra de Toma": ["Rejillas", "Compuertas de Toma", "Túnel de Conducción"]
-        };
-        populateAreaSelect();
+        console.error('❌ Error cargando áreas:', error);
       }
+      
+      // Fallback: usar configuración estática
+      console.log('🔄 Usando configuración por defecto...');
+      areasFrentes = {
+        "Túnel Grúa Puente": ["Túnel Norte", "Túnel Sur", "Grúa Puente Norte", "Grúa Puente Sur"],
+        "Casa de Máquinas": ["Casa de Máquinas Norte", "Casa de Máquinas Sur", "Turbina 1", "Turbina 2", "Generador 1", "Generador 2"],
+        "Transformador": ["Transformador Principal", "Transformador Auxiliar", "Patio de Maniobras"],
+        "Vertedero": ["Vertedero Principal", "Canal de Descarga", "Compuertas"],
+        "Embalse": ["Presa", "Coronamiento", "Talud Aguas Arriba", "Talud Aguas Abajo"],
+        "Obra de Toma": ["Rejillas", "Compuertas de Toma", "Túnel de Conducción"]
+      };
+      populateAreaSelect();
+      console.log('✅ Configuración por defecto aplicada');
     }
     
     // Poblar select de áreas
     function populateAreaSelect(){
+      console.log('🏗️ Poblando select de áreas...');
       areaEl.innerHTML = '<option value="">Selecciona un área...</option>';
-      Object.keys(areasFrentes).forEach(area => {
+      
+      const areas = Object.keys(areasFrentes);
+      console.log('📋 Áreas disponibles:', areas);
+      
+      areas.forEach(area => {
         const option = document.createElement('option');
         option.value = area;
         option.textContent = area;
         areaEl.appendChild(option);
+        console.log(`➕ Área agregada: ${area}`);
       });
+      
+      console.log(`✅ ${areas.length} áreas agregadas al select`);
     }
 
     // Enviar datos a Google Apps Script usando formulario para evitar CORS
