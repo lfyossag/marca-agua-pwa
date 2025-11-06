@@ -130,7 +130,6 @@
           <button class="secondary" id="btnPreview">Previsualizar</button>
           <button class="primary" id="btnProcess">Procesar y Guardar</button>
           <button class="danger" id="btnClear">Limpiar</button>
-          <button class="secondary" id="btnTestGAS" style="font-size:0.8em">🔧 Test GAS</button>
         </div>
 
         <p class="small" style="margin-top:10px">📷 La foto se guardará automáticamente en Google Drive con marca de agua.</p>
@@ -171,7 +170,8 @@
         name: 'Marcación de Fotos',
         short_name: 'MarcaFotos',
         description: 'Registra y marca fotos con información del proyecto, local y offline.',
-        start_url: '.',
+        start_url: './',
+        scope: './',
         display: 'standalone',
         background_color: '#0f172a',
         theme_color: '#0f172a',
@@ -205,10 +205,11 @@
           }
         });
       `;
-      if('serviceWorker' in navigator && location.protocol === 'https:'){
-        const swUrl=URL.createObjectURL(new Blob([swCode],{type:'text/javascript'}));
-        navigator.serviceWorker.register(swUrl).catch(console.error);
-      }
+      // ServiceWorker deshabilitado temporalmente para evitar errores en GitHub Pages
+      // if('serviceWorker' in navigator && location.protocol === 'https:'){
+      //   const swUrl=URL.createObjectURL(new Blob([swCode],{type:'text/javascript'}));
+      //   navigator.serviceWorker.register(swUrl).catch(console.error);
+      // }
 
       let deferredPrompt=null;
       const installBtn=document.getElementById('installBtn');
@@ -297,35 +298,6 @@
     frenteEl.addEventListener('change', updateFilename);
     descripcionFotoEl.addEventListener('input', updateFilename);
     fechaEl.addEventListener('change', updateFilename);
-    
-    // Botón de prueba del GAS
-    $("btnTestGAS").addEventListener('click', async (e) => {
-      e.preventDefault();
-      console.log('🧪 === INICIANDO PRUEBA DEL GAS ===');
-      
-      // Probar conexión básica
-      try {
-        console.log('1️⃣ Probando conexión básica al GAS...');
-        const response = await fetch(GAS_URL, {method: 'GET'});
-        console.log('📡 Respuesta básica:', response.status, response.statusText);
-      } catch (error) {
-        console.error('❌ Error conexión básica:', error);
-      }
-      
-      // Probar función getAreas
-      try {
-        console.log('2️⃣ Probando función getAreas...');
-        await loadAreasFromSheets();
-      } catch (error) {
-        console.error('❌ Error en loadAreasFromSheets:', error);
-      }
-      
-      // Mostrar estado actual
-      console.log('3️⃣ Estado actual de areasFrentes:', areasFrentes);
-      console.log('4️⃣ Opciones en select área:', areaEl.options.length);
-      
-      alert('Prueba completada. Revisa la consola (F12) para ver los resultados.');
-    });
 
     btnPreview.addEventListener('click',(e)=>{e.preventDefault(); drawPreview();});
     
@@ -468,33 +440,20 @@
       });
     }
     
-    // Cargar áreas y frentes desde Google Sheets
+    // Cargar áreas y frentes desde Google Sheets usando JSONP
     async function loadAreasFromSheets(){
       try {
-        console.log('🔄 Intentando cargar áreas desde Sheets...');
-        console.log('📡 URL del GAS:', GAS_URL + '?action=getAreas');
+        console.log('🔄 Intentando cargar áreas desde Sheets (JSONP)...');
         
-        const response = await fetch(GAS_URL + '?action=getAreas', {
-          method: 'GET',
-          mode: 'cors'
-        });
+        const data = await loadAreasWithJSONP();
         
-        console.log('📦 Respuesta recibida:', response.status, response.statusText);
-        
-        if (response.ok) {
-          const data = await response.json();
-          console.log('📄 Datos parseados:', data);
-          
-          if (data.success && data.data) {
-            areasFrentes = data.data;
-            populateAreaSelect();
-            console.log('✅ Áreas cargadas exitosamente:', Object.keys(areasFrentes));
-            return;
-          } else {
-            console.warn('⚠️ Respuesta no exitosa:', data.message);
-          }
+        if (data && data.success && data.data) {
+          areasFrentes = data.data;
+          populateAreaSelect();
+          console.log('✅ Áreas cargadas exitosamente desde Sheets:', Object.keys(areasFrentes));
+          return;
         } else {
-          console.warn('⚠️ Respuesta HTTP no OK:', response.status);
+          console.warn('⚠️ Respuesta no exitosa desde GAS');
         }
       } catch (error) {
         console.error('❌ Error cargando áreas:', error);
@@ -512,6 +471,43 @@
       };
       populateAreaSelect();
       console.log('✅ Configuración por defecto aplicada');
+    }
+    
+    // Función JSONP para cargar áreas sin problemas de CORS
+    function loadAreasWithJSONP() {
+      return new Promise((resolve, reject) => {
+        const callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
+        
+        // Crear función callback global temporal
+        window[callbackName] = function(data) {
+          delete window[callbackName];
+          document.body.removeChild(script);
+          resolve(data);
+        };
+        
+        // Crear script tag
+        const script = document.createElement('script');
+        script.src = GAS_URL + '?action=getAreas&callback=' + callbackName;
+        
+        // Manejar errores
+        script.onerror = function() {
+          delete window[callbackName];
+          document.body.removeChild(script);
+          reject(new Error('Error cargando script JSONP'));
+        };
+        
+        // Timeout
+        setTimeout(() => {
+          if (window[callbackName]) {
+            delete window[callbackName];
+            document.body.removeChild(script);
+            reject(new Error('Timeout JSONP'));
+          }
+        }, 10000);
+        
+        // Agregar script al DOM
+        document.body.appendChild(script);
+      });
     }
     
     // Poblar select de áreas
