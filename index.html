@@ -618,7 +618,7 @@
       console.log(`✅ ${areas.length} áreas agregadas al select`);
     }
 
-    // Enviar datos a Google Apps Script usando JSONP
+    // Enviar datos a Google Apps Script usando método híbrido
     async function sendToGAS(data){
       try {
         console.log('📤 Enviando datos a GAS:', {
@@ -629,10 +629,31 @@
           imageSize: (data.imageBase64.length / 1024).toFixed(1) + 'KB'
         });
         
-        console.log('🚀 Enviando a GAS URL usando JSONP...');
+        console.log('🚀 Enviando datos via POST y consultando resultado via JSONP...');
         
-        // Usar JSONP para POST también para poder leer la respuesta
-        const response = await sendDataWithJSONP(data);
+        // Generar ID único para esta operación
+        const operationId = 'op_' + Date.now() + '_' + Math.round(Math.random() * 1000);
+        
+        // 1. Enviar datos via POST con no-cors (pero incluir operationId)
+        const formData = new FormData();
+        formData.append('data', JSON.stringify({...data, operationId}));
+        
+        const postPromise = fetch(GAS_URL, {
+          method: 'POST',
+          body: formData,
+          mode: 'no-cors'
+        });
+        
+        // 2. Esperar un momento y luego consultar el resultado via JSONP
+        await postPromise;
+        
+        console.log('📤 POST enviado, consultando resultado...');
+        
+        // Esperar un poco para que se procese
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // 3. Consultar resultado via JSONP
+        const response = await getResultWithJSONP(operationId);
         
         console.log('✅ Respuesta recibida:', response);
         
@@ -644,45 +665,41 @@
       }
     }
     
-    // Función JSONP para enviar datos POST
-    function sendDataWithJSONP(data) {
+    // Función JSONP para consultar resultado
+    function getResultWithJSONP(operationId) {
       return new Promise((resolve, reject) => {
-        const callbackName = 'jsonp_post_' + Math.round(100000 * Math.random());
+        const callbackName = 'jsonp_result_' + Math.round(100000 * Math.random());
         
-        // Crear función callback global temporal
         window[callbackName] = function(response) {
           delete window[callbackName];
           document.body.removeChild(script);
           resolve(response);
         };
         
-        // Crear script tag con los datos como parámetros GET
         const params = new URLSearchParams({
-          action: 'savePhoto',
+          action: 'getResult',
           callback: callbackName,
-          data: JSON.stringify(data)
+          operationId: operationId
         });
         
         const script = document.createElement('script');
         script.src = GAS_URL + '?' + params.toString();
         
-        // Manejar errores
         script.onerror = function() {
           delete window[callbackName];
           document.body.removeChild(script);
-          reject(new Error('Error enviando datos'));
+          reject(new Error('Error consultando resultado'));
         };
         
-        // Timeout
+        // Timeout más largo para consulta de resultado
         setTimeout(() => {
           if (window[callbackName]) {
             delete window[callbackName];
             document.body.removeChild(script);
-            reject(new Error('Timeout enviando datos'));
+            reject(new Error('Timeout consultando resultado'));
           }
-        }, 30000); // 30 segundos para el envío
+        }, 10000);
         
-        // Agregar script al DOM
         document.body.appendChild(script);
       });
     }
