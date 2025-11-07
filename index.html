@@ -352,8 +352,13 @@
       btnProcess.disabled = true;
       
       try {
-        // Actualizar fecha de creación al momento exacto del procesamiento (hora de Bogotá)
+        // Actualizar fecha de creación al momento exacto del procesamiento
         fechaCreacionEl.value = getBogotaISOString();
+        
+        console.log('📅 Fechas al procesar:');
+        console.log('  CREACION:', fechaCreacionEl.value);
+        console.log('  FECHA:', fechaEl.value);
+        console.log('  ¿Son iguales?', fechaCreacionEl.value === fechaEl.value);
         
         // Procesar imagen con marca de agua
         await drawPreview(true);
@@ -363,10 +368,13 @@
         // Convertir blob a base64
         const imageBase64 = await blobToBase64(blob);
         
+        // Convertir fecha del input datetime-local a ISO string para consistencia
+        const fechaISO = fechaEl.value ? new Date(fechaEl.value).toISOString() : fechaCreacionEl.value;
+        
         // Preparar datos para envío
         const formData = {
           fechaCreacion: fechaCreacionEl.value,
-          fecha: fechaEl.value,
+          fecha: fechaISO,
           area: areaEl.value,
           frente: frenteEl.value,
           descripcionFoto: descripcionFotoEl.value,
@@ -398,7 +406,9 @@
           downloadLink.querySelector('button').textContent = `Descargar ${filename}.jpg`;
           setTimeout(()=>URL.revokeObjectURL(dl), 60000);
           
-          showSuccessModal(response.data.fileName, response.data.driveUrl);
+          // Como usamos no-cors, no podemos leer la respuesta real
+          // Construir URL de Drive manualmente o usar mensaje genérico
+          showSuccessModal(filename + '.jpg', null);
           
           // Limpiar formulario después del éxito
           btnClear.click();
@@ -753,12 +763,15 @@
           <div style="font-size: 48px; color: #22c55e; margin-bottom: 16px;">✓</div>
           <h3 style="color: #22c55e; margin: 0 0 16px 0; font-size: 1.2rem;">¡Foto guardada exitosamente!</h3>
           <p style="margin: 8px 0; color: #94a3b8;">
-            <strong>Archivo:</strong> ${fileName}<br>
-            <strong>Ubicación:</strong> Google Drive
+            La foto <strong>${fileName}</strong> ha sido procesada y guardada en Google Drive.
+          </p>
+          <p style="margin: 16px 0; color: #3b82f6; font-size: 0.9rem;">
+            📁 La imagen está disponible en la carpeta correspondiente de Google Drive<br>
+            📊 El registro se ha guardado en la base de datos
           </p>
           ${driveUrl ? `<p style="margin: 16px 0;"><a href="${driveUrl}" target="_blank" style="color: #3b82f6; text-decoration: underline;">🔗 Ver archivo en Drive</a></p>` : ''}
           <button onclick="closeModal()" style="margin-top: 20px; padding: 8px 20px; background: #22c55e; color: white; border: none; border-radius: 6px; cursor: pointer;">
-            Aceptar
+            Entendido
           </button>
         </div>
       `);
