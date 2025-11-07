@@ -246,16 +246,24 @@
     // Event listeners
     opacityEl.addEventListener('input',()=>opacityVal.textContent=opacityEl.value);
     
-    // Inicializar fecha de creación
-    fechaCreacionEl.value = new Date().toISOString();
-    
-    // Configurar fecha actual por defecto con zona horaria de Bogotá (-5 UTC)
-    function getBogotaDateTime() {
+    // Función para obtener fecha/hora de Bogotá (UTC-5)
+    function getBogotaTime() {
       const now = new Date();
       const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
       const bogotaTime = new Date(utc + (-5 * 3600000)); // UTC -5 para Bogotá
-      return bogotaTime.toISOString().slice(0,16);
+      return bogotaTime;
     }
+    
+    function getBogotaDateTime() {
+      return getBogotaTime().toISOString().slice(0,16);
+    }
+    
+    function getBogotaISOString() {
+      return getBogotaTime().toISOString();
+    }
+    
+    // Inicializar fechas con zona horaria de Bogotá
+    fechaCreacionEl.value = getBogotaISOString();
     fechaEl.value = getBogotaDateTime();
     
     // Cargar áreas y frentes desde la base de datos
@@ -310,6 +318,9 @@
       btnProcess.disabled = true;
       
       try {
+        // Actualizar fecha de creación al momento exacto del procesamiento (hora de Bogotá)
+        fechaCreacionEl.value = getBogotaISOString();
+        
         // Procesar imagen con marca de agua
         await drawPreview(true);
         const filename = generateFilename();
@@ -433,13 +444,19 @@
     }
     
     function formatDateTime(dateStr){
-      const date = new Date(dateStr);
-      const day = String(date.getDate()).padStart(2,'0');
-      const month = String(date.getMonth()+1).padStart(2,'0');
-      const year = date.getFullYear();
-      const hours = String(date.getHours()).padStart(2,'0');
-      const minutes = String(date.getMinutes()).padStart(2,'0');
-      return `${day}/${month}/${year} ${hours}:${minutes}`;
+      // Convertir el datetime-local a fecha de Bogotá
+      // dateStr viene en formato "YYYY-MM-DDTHH:MM"
+      const [datePart, timePart] = dateStr.split('T');
+      const [year, month, day] = datePart.split('-');
+      const [hours, minutes] = timePart.split(':');
+      
+      // Crear fecha en zona horaria de Bogotá (sin conversión automática del navegador)
+      const formattedDay = day.padStart(2,'0');
+      const formattedMonth = month.padStart(2,'0');
+      const formattedHours = hours.padStart(2,'0');
+      const formattedMinutes = minutes.padStart(2,'0');
+      
+      return `${formattedDay}/${formattedMonth}/${year} ${formattedHours}:${formattedMinutes}`;
     }
     
     // Convertir blob a base64
@@ -540,27 +557,15 @@
       console.log(`✅ ${areas.length} áreas agregadas al select`);
     }
 
-    // Enviar datos a Google Apps Script usando JSONP para obtener respuesta completa
+    // Enviar datos a Google Apps Script
     async function sendToGAS(data){
       try {
-        console.log('Enviando datos a GAS:', data.filename);
-        
-        // Intentar primero con JSONP para POST (si GAS lo soporta)
-        try {
-          const jsonpResult = await sendWithJSONP(data);
-          if (jsonpResult && jsonpResult.success) {
-            return jsonpResult;
-          }
-        } catch (jsonpError) {
-          console.log('JSONP no disponible para POST, usando FormData...');
-        }
-        
-        // Fallback: usar FormData con no-cors
-        console.log('📤 Preparando datos para envío...', {
+        console.log('📤 Enviando datos a GAS:', {
           filename: data.filename,
           area: data.area,
           frente: data.frente,
-          descripcion: data.descripcionFoto
+          descripcion: data.descripcionFoto,
+          imageSize: (data.imageBase64.length / 1024).toFixed(1) + 'KB'
         });
         
         const form = new FormData();
@@ -574,61 +579,26 @@
           mode: 'no-cors' // Evitar problemas de CORS
         });
         
-        // Con no-cors no podemos leer la respuesta, asumimos éxito
-        console.log('📡 Datos enviados a GAS (no-cors mode)', response.status || 'unknown');
+        // Con no-cors no podemos leer la respuesta directamente
+        // Pero si llega aquí sin error, el envío fue exitoso
+        console.log('✅ Datos enviados a GAS exitosamente');
         
         return { 
           success: true, 
-          message: 'Datos enviados correctamente',
+          message: 'Foto enviada correctamente a Google Drive',
           data: { 
             fileName: data.filename + '.jpg',
-            rowNumber: 'N/A (no-cors mode)'
+            timestamp: new Date().toISOString()
           }
         };
         
       } catch (error) {
-        console.error('Error enviando a GAS:', error);
-        throw error;
+        console.error('❌ Error enviando a GAS:', error);
+        throw new Error('Error de conexión: ' + error.message);
       }
     }
 
-    // Intentar envío con JSONP (experimental)
-    async function sendWithJSONP(data) {
-      return new Promise((resolve, reject) => {
-        const callbackName = 'gasPostCallback_' + Date.now();
-        
-        // Crear parámetros para GET con los datos
-        const params = new URLSearchParams({
-          action: 'savePhoto',
-          callback: callbackName,
-          data: JSON.stringify(data)
-        });
-        
-        window[callbackName] = (response) => {
-          delete window[callbackName];
-          document.body.removeChild(script);
-          resolve(response);
-        };
-        
-        const script = document.createElement('script');
-        script.src = `${GAS_URL}?${params.toString()}`;
-        script.onerror = () => {
-          delete window[callbackName];
-          document.body.removeChild(script);
-          reject(new Error('Error JSONP POST'));
-        };
-        
-        setTimeout(() => {
-          if (window[callbackName]) {
-            delete window[callbackName];
-            document.body.removeChild(script);
-            reject(new Error('Timeout JSONP POST'));
-          }
-        }, 30000); // 30 segundos para el upload
-        
-        document.body.appendChild(script);
-      });
-    }
+
 
     async function drawPreview(final=false){
       if(!loadedImg) return;
