@@ -529,12 +529,22 @@
       console.log(`✅ ${areas.length} áreas agregadas al select`);
     }
 
-    // Enviar datos a Google Apps Script usando formulario para evitar CORS
+    // Enviar datos a Google Apps Script usando JSONP para obtener respuesta completa
     async function sendToGAS(data){
       try {
         console.log('Enviando datos a GAS:', data.filename);
         
-        // Crear formulario oculto para envío sin CORS
+        // Intentar primero con JSONP para POST (si GAS lo soporta)
+        try {
+          const jsonpResult = await sendWithJSONP(data);
+          if (jsonpResult && jsonpResult.success) {
+            return jsonpResult;
+          }
+        } catch (jsonpError) {
+          console.log('JSONP no disponible para POST, usando FormData...');
+        }
+        
+        // Fallback: usar FormData con no-cors
         const form = new FormData();
         form.append('data', JSON.stringify(data));
         
@@ -560,6 +570,44 @@
         console.error('Error enviando a GAS:', error);
         throw error;
       }
+    }
+
+    // Intentar envío con JSONP (experimental)
+    async function sendWithJSONP(data) {
+      return new Promise((resolve, reject) => {
+        const callbackName = 'gasPostCallback_' + Date.now();
+        
+        // Crear parámetros para GET con los datos
+        const params = new URLSearchParams({
+          action: 'savePhoto',
+          callback: callbackName,
+          data: JSON.stringify(data)
+        });
+        
+        window[callbackName] = (response) => {
+          delete window[callbackName];
+          document.body.removeChild(script);
+          resolve(response);
+        };
+        
+        const script = document.createElement('script');
+        script.src = `${GAS_URL}?${params.toString()}`;
+        script.onerror = () => {
+          delete window[callbackName];
+          document.body.removeChild(script);
+          reject(new Error('Error JSONP POST'));
+        };
+        
+        setTimeout(() => {
+          if (window[callbackName]) {
+            delete window[callbackName];
+            document.body.removeChild(script);
+            reject(new Error('Timeout JSONP POST'));
+          }
+        }, 30000); // 30 segundos para el upload
+        
+        document.body.appendChild(script);
+      });
     }
 
     async function drawPreview(final=false){
