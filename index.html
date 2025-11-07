@@ -406,9 +406,11 @@
           downloadLink.querySelector('button').textContent = `Descargar ${filename}.jpg`;
           setTimeout(()=>URL.revokeObjectURL(dl), 60000);
           
-          // Como usamos no-cors, no podemos leer la respuesta real
-          // Construir URL de Drive manualmente o usar mensaje genérico
-          showSuccessModal(filename + '.jpg', null);
+          // Ahora podemos acceder a la URL real de Drive desde la respuesta
+          const driveUrl = response.data?.driveUrl || null;
+          const fileName = response.data?.fileName || (filename + '.jpg');
+          
+          showSuccessModal(fileName, driveUrl);
           
           // Limpiar formulario después del éxito
           btnClear.click();
@@ -616,7 +618,7 @@
       console.log(`✅ ${areas.length} áreas agregadas al select`);
     }
 
-    // Enviar datos a Google Apps Script
+    // Enviar datos a Google Apps Script usando JSONP
     async function sendToGAS(data){
       try {
         console.log('📤 Enviando datos a GAS:', {
@@ -627,34 +629,62 @@
           imageSize: (data.imageBase64.length / 1024).toFixed(1) + 'KB'
         });
         
-        const form = new FormData();
-        form.append('data', JSON.stringify(data));
+        console.log('🚀 Enviando a GAS URL usando JSONP...');
         
-        console.log('🚀 Enviando a GAS URL:', GAS_URL);
+        // Usar JSONP para POST también para poder leer la respuesta
+        const response = await sendDataWithJSONP(data);
         
-        const response = await fetch(GAS_URL, {
-          method: 'POST',
-          body: form,
-          mode: 'no-cors' // Evitar problemas de CORS
-        });
+        console.log('✅ Respuesta recibida:', response);
         
-        // Con no-cors no podemos leer la respuesta directamente
-        // Pero si llega aquí sin error, el envío fue exitoso
-        console.log('✅ Datos enviados a GAS exitosamente');
-        
-        return { 
-          success: true, 
-          message: 'Foto enviada correctamente a Google Drive',
-          data: { 
-            fileName: data.filename + '.jpg',
-            timestamp: new Date().toISOString()
-          }
-        };
+        return response;
         
       } catch (error) {
         console.error('❌ Error enviando a GAS:', error);
         throw new Error('Error de conexión: ' + error.message);
       }
+    }
+    
+    // Función JSONP para enviar datos POST
+    function sendDataWithJSONP(data) {
+      return new Promise((resolve, reject) => {
+        const callbackName = 'jsonp_post_' + Math.round(100000 * Math.random());
+        
+        // Crear función callback global temporal
+        window[callbackName] = function(response) {
+          delete window[callbackName];
+          document.body.removeChild(script);
+          resolve(response);
+        };
+        
+        // Crear script tag con los datos como parámetros GET
+        const params = new URLSearchParams({
+          action: 'savePhoto',
+          callback: callbackName,
+          data: JSON.stringify(data)
+        });
+        
+        const script = document.createElement('script');
+        script.src = GAS_URL + '?' + params.toString();
+        
+        // Manejar errores
+        script.onerror = function() {
+          delete window[callbackName];
+          document.body.removeChild(script);
+          reject(new Error('Error enviando datos'));
+        };
+        
+        // Timeout
+        setTimeout(() => {
+          if (window[callbackName]) {
+            delete window[callbackName];
+            document.body.removeChild(script);
+            reject(new Error('Timeout enviando datos'));
+          }
+        }, 30000); // 30 segundos para el envío
+        
+        // Agregar script al DOM
+        document.body.appendChild(script);
+      });
     }
 
 
@@ -759,36 +789,75 @@
     // Modales mejorados
     function showSuccessModal(fileName, driveUrl) {
       const modal = createModal(`
-        <div style="text-align: center; padding: 20px;">
-          <div style="font-size: 48px; color: #22c55e; margin-bottom: 16px;">✓</div>
-          <h3 style="color: #22c55e; margin: 0 0 16px 0; font-size: 1.2rem;">¡Foto guardada exitosamente!</h3>
-          <p style="margin: 8px 0; color: #94a3b8;">
-            La foto <strong>${fileName}</strong> ha sido procesada y guardada en Google Drive.
+        <div style="text-align: center; padding: 24px;">
+          <div style="width: 60px; height: 60px; margin: 0 auto 20px; background: #22c55e; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
+              <polyline points="20,6 9,17 4,12"></polyline>
+            </svg>
+          </div>
+          <h3 style="color: #e5e7eb; margin: 0 0 12px 0; font-size: 1.3rem; font-weight: 600;">Foto guardada</h3>
+          <p style="margin: 0 0 20px 0; color: #94a3b8; font-size: 0.95rem;">
+            <strong style="color: #e5e7eb;">${fileName}</strong> se ha guardado correctamente
           </p>
-          <p style="margin: 16px 0; color: #3b82f6; font-size: 0.9rem;">
-            📁 La imagen está disponible en la carpeta correspondiente de Google Drive<br>
-            📊 El registro se ha guardado en la base de datos
-          </p>
-          ${driveUrl ? `<p style="margin: 16px 0;"><a href="${driveUrl}" target="_blank" style="color: #3b82f6; text-decoration: underline;">🔗 Ver archivo en Drive</a></p>` : ''}
-          <button onclick="closeModal()" style="margin-top: 20px; padding: 8px 20px; background: #22c55e; color: white; border: none; border-radius: 6px; cursor: pointer;">
-            Entendido
-          </button>
+          
+          ${driveUrl ? `
+          <div style="margin: 20px 0;">
+            <a href="${driveUrl}" target="_blank" style="
+              display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; 
+              background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; 
+              text-decoration: none; border-radius: 8px; font-weight: 500;
+              transition: all 0.2s; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+            " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 20px rgba(59, 130, 246, 0.4)'" 
+               onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(59, 130, 246, 0.3)'">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+              </svg>
+              Ver en Google Drive
+            </a>
+          </div>` : ''}
+          
+          <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid #374151;">
+            <button onclick="closeModal()" style="
+              padding: 10px 24px; background: #374151; color: #e5e7eb; 
+              border: none; border-radius: 6px; cursor: pointer; font-weight: 500;
+              transition: background 0.2s;
+            " onmouseover="this.style.background='#4b5563'" onmouseout="this.style.background='#374151'">
+              Cerrar
+            </button>
+          </div>
         </div>
       `);
     }
     
     function showErrorModal(errorMessage) {
       const modal = createModal(`
-        <div style="text-align: center; padding: 20px;">
-          <div style="font-size: 48px; color: #ef4444; margin-bottom: 16px;">⚠</div>
-          <h3 style="color: #ef4444; margin: 0 0 16px 0; font-size: 1.2rem;">Error al guardar</h3>
-          <p style="margin: 8px 0; color: #94a3b8;">
+        <div style="text-align: center; padding: 24px;">
+          <div style="width: 60px; height: 60px; margin: 0 auto 20px; background: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="15" y1="9" x2="9" y2="15"></line>
+              <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+          </div>
+          <h3 style="color: #e5e7eb; margin: 0 0 12px 0; font-size: 1.3rem; font-weight: 600;">Error al guardar</h3>
+          <p style="margin: 0 0 16px 0; color: #94a3b8; font-size: 0.95rem;">
             ${errorMessage}
           </p>
-          <p style="margin: 16px 0; color: #f59e0b; font-size: 0.9rem;">
-            💡 Puedes descargar la imagen localmente usando el botón de descarga
-          </p>
-          <button onclick="closeModal()" style="margin-top: 20px; padding: 8px 20px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer;">
+          <div style="margin: 20px 0; padding: 16px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; color: #f59e0b; font-size: 0.9rem;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="m9 12 2 2 4-4"></path>
+              </svg>
+              Puedes descargar la imagen localmente
+            </div>
+          </div>
+          <button onclick="closeModal()" style="
+            padding: 10px 24px; background: #374151; color: #e5e7eb; 
+            border: none; border-radius: 6px; cursor: pointer; font-weight: 500;
+            transition: background 0.2s;
+          " onmouseover="this.style.background='#4b5563'" onmouseout="this.style.background='#374151'">
             Cerrar
           </button>
         </div>
@@ -797,13 +866,23 @@
     
     function showValidationModal(message, focusElement) {
       const modal = createModal(`
-        <div style="text-align: center; padding: 20px;">
-          <div style="font-size: 48px; color: #f59e0b; margin-bottom: 16px;">ℹ</div>
-          <h3 style="color: #f59e0b; margin: 0 0 16px 0; font-size: 1.2rem;">Campo requerido</h3>
-          <p style="margin: 8px 0; color: #94a3b8;">
+        <div style="text-align: center; padding: 24px;">
+          <div style="width: 60px; height: 60px; margin: 0 auto 20px; background: #f59e0b; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <h3 style="color: #e5e7eb; margin: 0 0 12px 0; font-size: 1.3rem; font-weight: 600;">Campo requerido</h3>
+          <p style="margin: 0 0 24px 0; color: #94a3b8; font-size: 0.95rem;">
             ${message}
           </p>
-          <button onclick="closeModal(); focusField('${focusElement.id}')" style="margin-top: 20px; padding: 8px 20px; background: #f59e0b; color: white; border: none; border-radius: 6px; cursor: pointer;">
+          <button onclick="closeModal(); focusField('${focusElement.id}')" style="
+            padding: 10px 24px; background: #f59e0b; color: white; 
+            border: none; border-radius: 6px; cursor: pointer; font-weight: 500;
+            transition: background 0.2s;
+          " onmouseover="this.style.background='#d97706'" onmouseout="this.style.background='#f59e0b'">
             Entendido
           </button>
         </div>
