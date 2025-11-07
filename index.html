@@ -246,25 +246,58 @@
     // Event listeners
     opacityEl.addEventListener('input',()=>opacityVal.textContent=opacityEl.value);
     
-    // Función para obtener fecha/hora de Bogotá (UTC-5)
+    // Función para obtener fecha/hora de Bogotá usando la API nativa
     function getBogotaTime() {
+      // Usar la API de zona horaria nativa del navegador
       const now = new Date();
-      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-      const bogotaTime = new Date(utc + (-5 * 3600000)); // UTC -5 para Bogotá
+      const bogotaTime = new Date(now.toLocaleString("en-US", {timeZone: "America/Bogota"}));
       return bogotaTime;
     }
     
-    function getBogotaDateTime() {
-      return getBogotaTime().toISOString().slice(0,16);
+    function getBogotaDateTimeForInput() {
+      // Para el input datetime-local, crear la fecha directamente en formato local
+      const now = new Date();
+      
+      // Obtener los componentes de fecha/hora en zona horaria de Bogotá
+      const bogotaFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Bogota',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      
+      const parts = bogotaFormatter.formatToParts(now);
+      const year = parts.find(p => p.type === 'year').value;
+      const month = parts.find(p => p.type === 'month').value;
+      const day = parts.find(p => p.type === 'day').value;
+      const hour = parts.find(p => p.type === 'hour').value;
+      const minute = parts.find(p => p.type === 'minute').value;
+      
+      return `${year}-${month}-${day}T${hour}:${minute}`;
     }
     
     function getBogotaISOString() {
       return getBogotaTime().toISOString();
     }
     
+    // Mostrar hora actual de Bogotá en la consola para verificación
+    const bogotaTimeString = new Date().toLocaleString('es-CO', {
+      timeZone: 'America/Bogota',
+      year: 'numeric',
+      month: '2-digit', 
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+    console.log('🕐 Hora actual de Bogotá:', bogotaTimeString);
+    
     // Inicializar fechas con zona horaria de Bogotá
     fechaCreacionEl.value = getBogotaISOString();
-    fechaEl.value = getBogotaDateTime();
+    fechaEl.value = getBogotaDateTimeForInput();
     
     // Cargar áreas y frentes desde la base de datos
     loadAreasFromSheets();
