@@ -330,6 +330,17 @@
           imageBase64: imageBase64
         };
         
+        console.log('📋 Datos preparados para envío:', {
+          fechaCreacion: formData.fechaCreacion,
+          fecha: formData.fecha,
+          area: formData.area,
+          frente: formData.frente,
+          descripcionFoto: formData.descripcionFoto,
+          observaciones: formData.observaciones,
+          filename: formData.filename,
+          imageSize: formData.imageBase64 ? (formData.imageBase64.length / 1024).toFixed(1) + 'KB' : 'No image'
+        });
+        
         // Enviar a Google Apps Script
         const response = await sendToGAS(formData);
         
@@ -545,8 +556,17 @@
         }
         
         // Fallback: usar FormData con no-cors
+        console.log('📤 Preparando datos para envío...', {
+          filename: data.filename,
+          area: data.area,
+          frente: data.frente,
+          descripcion: data.descripcionFoto
+        });
+        
         const form = new FormData();
         form.append('data', JSON.stringify(data));
+        
+        console.log('🚀 Enviando a GAS URL:', GAS_URL);
         
         const response = await fetch(GAS_URL, {
           method: 'POST',
@@ -555,7 +575,7 @@
         });
         
         // Con no-cors no podemos leer la respuesta, asumimos éxito
-        console.log('Datos enviados a GAS (no-cors mode)');
+        console.log('📡 Datos enviados a GAS (no-cors mode)', response.status || 'unknown');
         
         return { 
           success: true, 
