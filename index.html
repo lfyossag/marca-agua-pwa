@@ -49,7 +49,7 @@
       <button id="installBtn" class="install" style="display:none">Instalar</button>
     </h1>
     <p class="small">Registra y marca fotos con información del proyecto.</p>
-    <p class="small" style="margin-top: 8px; color: #f59e0b;">📝 Los campos marcados con (*) son obligatorios</p>
+    <p class="small" style="margin-top: 8px; color: #f59e0b;">Los campos marcados con (*) son obligatorios</p>
 
     <div class="grid">
       <section class="card">
@@ -398,7 +398,7 @@
           downloadLink.querySelector('button').textContent = `Descargar ${filename}.jpg`;
           setTimeout(()=>URL.revokeObjectURL(dl), 60000);
           
-          showSuccessModal(response.data.fileName, response.data.rowNumber || 'N/A');
+          showSuccessModal(response.data.fileName, response.data.driveUrl);
           
           // Limpiar formulario después del éxito
           btnClear.click();
@@ -454,11 +454,26 @@
     function humanSize(bytes){ const u=['B','KB','MB','GB']; let i=0,n=bytes; while(n>=1024&&i<u.length-1){n/=1024;i++;} return `${n.toFixed(1)} ${u[i]}`; }
     
     function validateForm(){
-      if(!fechaEl.value){ alert('Por favor selecciona una fecha'); return false; }
-      if(!areaEl.value){ alert('Por favor selecciona un área'); return false; }
-      if(!frenteEl.value){ alert('Por favor selecciona un frente'); return false; }
-      if(!loadedImg){ alert('Por favor selecciona una imagen'); return false; }
-      if(!descripcionFotoEl.value.trim()){ alert('Por favor ingresa una descripción de la foto'); return false; }
+      if(!fechaEl.value){ 
+        showValidationModal('Por favor selecciona una fecha', fechaEl); 
+        return false; 
+      }
+      if(!areaEl.value){ 
+        showValidationModal('Por favor selecciona un área', areaEl); 
+        return false; 
+      }
+      if(!frenteEl.value){ 
+        showValidationModal('Por favor selecciona un frente', frenteEl); 
+        return false; 
+      }
+      if(!loadedImg){ 
+        showValidationModal('Por favor selecciona una imagen', fileEl); 
+        return false; 
+      }
+      if(!descripcionFotoEl.value.trim()){ 
+        showValidationModal('Por favor ingresa una descripción de la foto', descripcionFotoEl); 
+        return false; 
+      }
       return true;
     }
     
@@ -732,16 +747,16 @@
     }
     
     // Modales mejorados
-    function showSuccessModal(fileName, rowNumber) {
+    function showSuccessModal(fileName, driveUrl) {
       const modal = createModal(`
         <div style="text-align: center; padding: 20px;">
           <div style="font-size: 48px; color: #22c55e; margin-bottom: 16px;">✓</div>
           <h3 style="color: #22c55e; margin: 0 0 16px 0; font-size: 1.2rem;">¡Foto guardada exitosamente!</h3>
           <p style="margin: 8px 0; color: #94a3b8;">
             <strong>Archivo:</strong> ${fileName}<br>
-            <strong>Registro:</strong> Fila ${rowNumber} en Google Sheets<br>
             <strong>Ubicación:</strong> Google Drive
           </p>
+          ${driveUrl ? `<p style="margin: 16px 0;"><a href="${driveUrl}" target="_blank" style="color: #3b82f6; text-decoration: underline;">🔗 Ver archivo en Drive</a></p>` : ''}
           <button onclick="closeModal()" style="margin-top: 20px; padding: 8px 20px; background: #22c55e; color: white; border: none; border-radius: 6px; cursor: pointer;">
             Aceptar
           </button>
@@ -765,6 +780,30 @@
           </button>
         </div>
       `);
+    }
+    
+    function showValidationModal(message, focusElement) {
+      const modal = createModal(`
+        <div style="text-align: center; padding: 20px;">
+          <div style="font-size: 48px; color: #f59e0b; margin-bottom: 16px;">ℹ</div>
+          <h3 style="color: #f59e0b; margin: 0 0 16px 0; font-size: 1.2rem;">Campo requerido</h3>
+          <p style="margin: 8px 0; color: #94a3b8;">
+            ${message}
+          </p>
+          <button onclick="closeModal(); focusField('${focusElement.id}')" style="margin-top: 20px; padding: 8px 20px; background: #f59e0b; color: white; border: none; border-radius: 6px; cursor: pointer;">
+            Entendido
+          </button>
+        </div>
+      `);
+    }
+    
+    function focusField(elementId) {
+      const element = document.getElementById(elementId);
+      if (element) {
+        element.focus();
+        // Scroll al elemento si está fuera de vista
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     }
     
     function createModal(content) {
