@@ -243,9 +243,327 @@
     
     // Configuración de áreas y frentes (se cargará dinámicamente)
     let areasFrentes = {};
+    
+    // Base de datos IndexedDB
+    let db = null;
+    const DB_NAME = 'MarcacionFotosDB';
+    const DB_VERSION = 1;
+    const STORE_NAME = 'fotos';
+    
+    // Estado de sincronización
+    let isSyncing = false;
+    let isOnline = navigator.onLine;
 
     // Event listeners
     opacityEl.addEventListener('input',()=>opacityVal.textContent=opacityEl.value);
+    
+    // ========================================
+    // SISTEMA DE ALMACENAMIENTO OFFLINE
+    // ========================================
+    
+    /**
+     * Inicializar IndexedDB
+     */
+    async function initDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        
+        request.onerror = () => {
+          console.error('❌ Error abriendo IndexedDB:', request.error);
+          reject(request.error);
+        };
+        
+        request.onsuccess = () => {
+          db = request.result;
+          console.log('✅ IndexedDB inicializado');
+          resolve(db);
+        };
+        
+        request.onupgradeneeded = (event) => {
+          const db = event.target.result;
+          
+          // Crear object store si no existe
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            const objectStore = db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+            
+            // Crear índices
+            objectStore.createIndex('status', 'status', { unique: false });
+            objectStore.createIndex('timestamp', 'timestamp', { unique: false });
+            objectStore.createIndex('filename', 'filename', { unique: false });
+            
+            console.log('✅ Object store creado');
+          }
+        };
+      });
+    }
+    
+    /**
+     * Guardar foto en IndexedDB
+     */
+    async function saveFotoToDB(fotoData) {
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const objectStore = transaction.objectStore(STORE_NAME);
+        
+        const foto = {
+          ...fotoData,
+          timestamp: new Date().toISOString(),
+          status: 'pending' // pending, syncing, synced, error
+        };
+        
+        const request = objectStore.add(foto);
+        
+        request.onsuccess = () => {
+          console.log('✅ Foto guardada en IndexedDB:', request.result);
+          resolve(request.result);
+        };
+        
+        request.onerror = () => {
+          console.error('❌ Error guardando foto:', request.error);
+          reject(request.error);
+        };
+      });
+    }
+    
+    /**
+     * Obtener todas las fotos pendientes
+     */
+    async function getPendingFotos() {
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readonly');
+        const objectStore = transaction.objectStore(STORE_NAME);
+        const index = objectStore.index('status');
+        const request = index.getAll('pending');
+        
+        request.onsuccess = () => {
+          resolve(request.result);
+        };
+        
+        request.onerror = () => {
+          reject(request.error);
+        };
+      });
+    }
+    
+    /**
+     * Actualizar estado de una foto
+     */
+    async function updateFotoStatus(id, status, driveUrl = null, error = null) {
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const objectStore = transaction.objectStore(STORE_NAME);
+        const request = objectStore.get(id);
+        
+        request.onsuccess = () => {
+          const foto = request.result;
+          foto.status = status;
+          if (driveUrl) foto.driveUrl = driveUrl;
+          if (error) foto.error = error;
+          foto.syncedAt = new Date().toISOString();
+          
+          const updateRequest = objectStore.put(foto);
+          
+          updateRequest.onsuccess = () => {
+            resolve();
+          };
+          
+          updateRequest.onerror = () => {
+            reject(updateRequest.error);
+          };
+        };
+        
+        request.onerror = () => {
+          reject(request.error);
+        };
+      });
+    }
+    
+    /**
+     * Obtener conteo de fotos pendientes
+     */
+    async function getPendingCount() {
+      const pending = await getPendingFotos();
+      return pending.length;
+    }
+    
+    /**
+     * Eliminar fotos sincronizadas antiguas (más de 7 días)
+     */
+    async function cleanOldSyncedFotos() {
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const objectStore = transaction.objectStore(STORE_NAME);
+        const request = objectStore.openCursor();
+        
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        
+        request.onsuccess = (event) => {
+          const cursor = event.target.result;
+          if (cursor) {
+            const foto = cursor.value;
+            if (foto.status === 'synced' && new Date(foto.syncedAt) < sevenDaysAgo) {
+              cursor.delete();
+              console.log('🗑️ Foto sincronizada antigua eliminada:', foto.filename);
+            }
+            cursor.continue();
+          } else {
+            resolve();
+          }
+        };
+        
+        request.onerror = () => {
+          reject(request.error);
+        };
+      });
+    }
+    
+    // Event listeners
+    opacityEl.addEventListener('input',()=>opacityVal.textContent=opacityEl.value);
+    
+    // ========================================
+    // SISTEMA DE SINCRONIZACIÓN
+    // ========================================
+    
+    /**
+     * Sincronizar fotos pendientes con Google Drive
+     */
+    async function syncPendingFotos() {
+      if (isSyncing) {
+        console.log('⏳ Sincronización ya en progreso...');
+        return;
+      }
+      
+      if (!isOnline) {
+        console.log('📴 Sin conexión, sincronización cancelada');
+        return;
+      }
+      
+      isSyncing = true;
+      updateSyncUI();
+      
+      try {
+        const pending = await getPendingFotos();
+        console.log(`📤 Sincronizando ${pending.length} fotos pendientes...`);
+        
+        if (pending.length === 0) {
+          console.log('✅ No hay fotos pendientes');
+          isSyncing = false;
+          updateSyncUI();
+          return;
+        }
+        
+        let syncedCount = 0;
+        let errorCount = 0;
+        
+        for (const foto of pending) {
+          try {
+            console.log(`📤 Sincronizando: ${foto.filename}`);
+            
+            // Actualizar estado a "syncing"
+            await updateFotoStatus(foto.id, 'syncing');
+            updateSyncUI();
+            
+            // Enviar a Google Drive
+            const response = await sendToGAS(foto.data);
+            
+            if (response.success) {
+              // Marcar como sincronizada
+              await updateFotoStatus(foto.id, 'synced', response.data?.driveUrl);
+              syncedCount++;
+              console.log(`✅ Sincronizada: ${foto.filename}`);
+            } else {
+              // Marcar como error
+              await updateFotoStatus(foto.id, 'error', null, response.message);
+              errorCount++;
+              console.error(`❌ Error sincronizando: ${foto.filename}`, response.message);
+            }
+            
+          } catch (error) {
+            // Marcar como error
+            await updateFotoStatus(foto.id, 'error', null, error.message);
+            errorCount++;
+            console.error(`❌ Error sincronizando: ${foto.filename}`, error);
+          }
+          
+          updateSyncUI();
+        }
+        
+        console.log(`✅ Sincronización completa: ${syncedCount} exitosas, ${errorCount} errores`);
+        
+        // Mostrar notificación de resultado
+        if (syncedCount > 0) {
+          showSyncResultModal(syncedCount, errorCount);
+        }
+        
+        // Limpiar fotos sincronizadas antiguas
+        await cleanOldSyncedFotos();
+        
+      } catch (error) {
+        console.error('❌ Error en sincronización:', error);
+      } finally {
+        isSyncing = false;
+        updateSyncUI();
+      }
+    }
+    
+    /**
+     * Detectar cambios en la conexión
+     */
+    window.addEventListener('online', () => {
+      console.log('🌐 Conexión restaurada');
+      isOnline = true;
+      updateSyncUI();
+      
+      // Sincronizar automáticamente cuando se recupera la conexión
+      setTimeout(() => {
+        syncPendingFotos();
+      }, 2000);
+    });
+    
+    window.addEventListener('offline', () => {
+      console.log('📴 Conexión perdida');
+      isOnline = false;
+      updateSyncUI();
+    });
+    
+    /**
+     * Actualizar UI de sincronización
+     */
+    async function updateSyncUI() {
+      const pendingCount = await getPendingCount();
+      
+      // Actualizar badge de fotos pendientes
+      let badge = document.getElementById('sync-badge');
+      if (!badge && pendingCount > 0) {
+        // Crear badge si no existe
+        badge = document.createElement('div');
+        badge.id = 'sync-badge';
+        badge.style.cssText = `
+          position: fixed; top: 20px; right: 20px; 
+          background: ${isOnline ? '#3b82f6' : '#ef4444'}; 
+          color: white; padding: 10px 16px; border-radius: 20px;
+          font-weight: 600; font-size: 0.9rem; z-index: 999;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+          cursor: pointer; transition: all 0.3s;
+          display: flex; align-items: center; gap: 8px;
+        `;
+        badge.onclick = () => showPendingFotosModal();
+        document.body.appendChild(badge);
+      }
+      
+      if (badge) {
+        if (pendingCount > 0) {
+          const statusIcon = isSyncing ? '⏳' : (isOnline ? '📤' : '📴');
+          const statusText = isSyncing ? 'Sincronizando...' : `${pendingCount} pendiente${pendingCount > 1 ? 's' : ''}`;
+          badge.innerHTML = `${statusIcon} ${statusText}`;
+          badge.style.background = isSyncing ? '#f59e0b' : (isOnline ? '#3b82f6' : '#ef4444');
+          badge.style.display = 'flex';
+        } else {
+          badge.style.display = 'none';
+        }
+      }
+    }
     
     // Función para obtener fecha/hora de Bogotá usando la API nativa
     function getBogotaTime() {
@@ -299,6 +617,35 @@
     // Inicializar fechas con zona horaria de Bogotá
     fechaCreacionEl.value = getBogotaISOString();
     fechaEl.value = getBogotaDateTimeForInput();
+    
+    // Inicializar sistema offline
+    (async () => {
+      try {
+        await initDB();
+        await updateSyncUI();
+        
+        // Sincronizar automáticamente si hay conexión
+        if (isOnline) {
+          setTimeout(() => {
+            syncPendingFotos();
+          }, 3000); // Esperar 3 segundos después de cargar
+        }
+        
+        // Sincronizar cada 5 minutos si hay conexión
+        setInterval(async () => {
+          if (isOnline && !isSyncing) {
+            const pendingCount = await getPendingCount();
+            if (pendingCount > 0) {
+              console.log('🔄 Sincronización automática periódica...');
+              syncPendingFotos();
+            }
+          }
+        }, 5 * 60 * 1000); // 5 minutos
+        
+      } catch (error) {
+        console.error('Error inicializando sistema offline:', error);
+      }
+    })();
     
     // Cargar áreas y frentes desde la base de datos
     loadAreasFromSheets();
@@ -394,45 +741,69 @@
           imageSize: formData.imageBase64 ? (formData.imageBase64.length / 1024).toFixed(1) + 'KB' : 'No image'
         });
         
-        // Enviar a Google Apps Script
-        const response = await sendToGAS(formData);
-        
-        if (response.success) {
-          // Éxito: mostrar enlace de descarga local también
-          const dl = URL.createObjectURL(blob);
-          downloadLink.href = dl;
-          downloadLink.download = `${filename}.jpg`;
-          downloadLink.style.display = 'inline-block';
-          downloadLink.querySelector('button').textContent = `Descargar ${filename}.jpg`;
-          setTimeout(()=>URL.revokeObjectURL(dl), 60000);
-          
-          // Ahora podemos acceder a la URL real de Drive desde la respuesta
-          const driveUrl = response.data?.driveUrl || null;
-          const fileName = response.data?.fileName || (filename + '.jpg');
-          
-          showSuccessModal(fileName, driveUrl);
-          
-          // Limpiar formulario después del éxito
-          btnClear.click();
-          
-        } else {
-          throw new Error(response.message || 'Error desconocido del servidor');
-        }
-        
-      } catch (error) {
-        console.error('Error procesando foto:', error);
-        
-        // En caso de error, ofrecer descarga local
-        await drawPreview(true);
-        const filename = generateFilename();
-        const blob = await new Promise(res=>canvas.toBlob(res,'image/jpeg',0.9));
+        // Guardar descarga local
         const dl = URL.createObjectURL(blob);
         downloadLink.href = dl;
         downloadLink.download = `${filename}.jpg`;
         downloadLink.style.display = 'inline-block';
-        downloadLink.querySelector('button').textContent = `Descargar ${filename}.jpg (Error en envío)`;
+        downloadLink.querySelector('button').textContent = `Descargar ${filename}.jpg`;
         setTimeout(()=>URL.revokeObjectURL(dl), 60000);
         
+        // Verificar conexión
+        if (!isOnline) {
+          console.log('📴 Sin conexión - Guardando localmente');
+          
+          // Guardar en IndexedDB
+          await saveFotoToDB({
+            filename: filename,
+            data: formData
+          });
+          
+          await updateSyncUI();
+          
+          showOfflineSuccessModal(filename + '.jpg');
+          
+          // Limpiar formulario
+          btnClear.click();
+          
+        } else {
+          // Intentar enviar a Google Apps Script
+          try {
+            const response = await sendToGAS(formData);
+            
+            if (response.success) {
+              // Ahora podemos acceder a la URL real de Drive desde la respuesta
+              const driveUrl = response.data?.driveUrl || null;
+              const fileName = response.data?.fileName || (filename + '.jpg');
+              
+              showSuccessModal(fileName, driveUrl);
+              
+              // Limpiar formulario después del éxito
+              btnClear.click();
+              
+            } else {
+              throw new Error(response.message || 'Error desconocido del servidor');
+            }
+          } catch (error) {
+            console.error('Error enviando a Drive, guardando localmente:', error);
+            
+            // Si falla el envío, guardar localmente
+            await saveFotoToDB({
+              filename: filename,
+              data: formData
+            });
+            
+            await updateSyncUI();
+            
+            showOfflineFallbackModal(filename + '.jpg', error.message);
+            
+            // Limpiar formulario
+            btnClear.click();
+          }
+        }
+        
+      } catch (error) {
+        console.error('Error procesando foto:', error);
         showErrorModal(error.message);
       } finally {
         // Restaurar botón
@@ -904,6 +1275,181 @@
           </button>
         </div>
       `);
+    }
+    
+    function showOfflineSuccessModal(fileName) {
+      const modal = createModal(`
+        <div style="text-align: center; padding: 24px;">
+          <div style="width: 60px; height: 60px; margin: 0 auto 20px; background: #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </div>
+          <h3 style="color: #e5e7eb; margin: 0 0 12px 0; font-size: 1.3rem; font-weight: 600;">Guardado localmente</h3>
+          <p style="margin: 0 0 16px 0; color: #94a3b8; font-size: 0.95rem;">
+            <strong style="color: #e5e7eb;">${fileName}</strong> se guardó en tu dispositivo
+          </p>
+          <div style="margin: 20px 0; padding: 16px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px;">
+            <div style="color: #3b82f6; font-size: 0.9rem;">
+              📴 Sin conexión a internet<br>
+              <span style="color: #94a3b8; font-size: 0.85rem;">Se sincronizará automáticamente cuando te conectes</span>
+            </div>
+          </div>
+          <button onclick="closeModal()" style="
+            padding: 10px 24px; background: #374151; color: #e5e7eb; 
+            border: none; border-radius: 6px; cursor: pointer; font-weight: 500;
+            transition: background 0.2s;
+          " onmouseover="this.style.background='#4b5563'" onmouseout="this.style.background='#374151'">
+            Cerrar
+          </button>
+        </div>
+      `);
+    }
+    
+    function showOfflineFallbackModal(fileName, errorMsg) {
+      const modal = createModal(`
+        <div style="text-align: center; padding: 24px;">
+          <div style="width: 60px; height: 60px; margin: 0 auto 20px; background: #f59e0b; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </div>
+          <h3 style="color: #e5e7eb; margin: 0 0 12px 0; font-size: 1.3rem; font-weight: 600;">Guardado localmente</h3>
+          <p style="margin: 0 0 16px 0; color: #94a3b8; font-size: 0.95rem;">
+            No se pudo enviar a Drive, pero <strong style="color: #e5e7eb;">${fileName}</strong> se guardó localmente
+          </p>
+          <div style="margin: 20px 0; padding: 16px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px;">
+            <div style="color: #f59e0b; font-size: 0.85rem; margin-bottom: 8px;">
+              Error: ${errorMsg}
+            </div>
+            <div style="color: #94a3b8; font-size: 0.85rem;">
+              Se reintentará automáticamente
+            </div>
+          </div>
+          <button onclick="closeModal()" style="
+            padding: 10px 24px; background: #374151; color: #e5e7eb; 
+            border: none; border-radius: 6px; cursor: pointer; font-weight: 500;
+            transition: background 0.2s;
+          " onmouseover="this.style.background='#4b5563'" onmouseout="this.style.background='#374151'">
+            Cerrar
+          </button>
+        </div>
+      `);
+    }
+    
+    function showSyncResultModal(syncedCount, errorCount) {
+      const modal = createModal(`
+        <div style="text-align: center; padding: 24px;">
+          <div style="width: 60px; height: 60px; margin: 0 auto 20px; background: #22c55e; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </div>
+          <h3 style="color: #e5e7eb; margin: 0 0 12px 0; font-size: 1.3rem; font-weight: 600;">Sincronización completada</h3>
+          <p style="margin: 0 0 20px 0; color: #94a3b8; font-size: 0.95rem;">
+            ${syncedCount} foto${syncedCount > 1 ? 's sincronizadas' : ' sincronizada'} correctamente
+            ${errorCount > 0 ? `<br><span style="color: #ef4444;">${errorCount} error${errorCount > 1 ? 'es' : ''}</span>` : ''}
+          </p>
+          <button onclick="closeModal()" style="
+            padding: 10px 24px; background: #22c55e; color: white; 
+            border: none; border-radius: 6px; cursor: pointer; font-weight: 500;
+            transition: background 0.2s;
+          " onmouseover="this.style.background='#16a34a'" onmouseout="this.style.background='#22c55e'">
+            Cerrar
+          </button>
+        </div>
+      `);
+    }
+    
+    async function showPendingFotosModal() {
+      const pending = await getPendingFotos();
+      const synced = await getAllSyncedFotos();
+      
+      let listHtml = '';
+      
+      if (pending.length > 0) {
+        listHtml += '<div style="margin-bottom: 20px;"><h4 style="color: #3b82f6; margin: 0 0 12px 0; font-size: 1rem;">📤 Pendientes de sincronizar</h4>';
+        pending.forEach(foto => {
+          const statusColor = foto.status === 'syncing' ? '#f59e0b' : (foto.status === 'error' ? '#ef4444' : '#3b82f6');
+          const statusText = foto.status === 'syncing' ? 'Sincronizando...' : (foto.status === 'error' ? 'Error' : 'Pendiente');
+          listHtml += `
+            <div style="padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 8px; text-align: left;">
+              <div style="color: #e5e7eb; font-weight: 500; font-size: 0.9rem;">${foto.filename}</div>
+              <div style="color: ${statusColor}; font-size: 0.85rem; margin-top: 4px;">${statusText}</div>
+              ${foto.error ? `<div style="color: #ef4444; font-size: 0.8rem; margin-top: 4px;">${foto.error}</div>` : ''}
+            </div>
+          `;
+        });
+        listHtml += '</div>';
+      }
+      
+      if (synced.length > 0) {
+        listHtml += '<div><h4 style="color: #22c55e; margin: 0 0 12px 0; font-size: 1rem;">✅ Sincronizadas recientemente</h4>';
+        synced.slice(0, 5).forEach(foto => {
+          listHtml += `
+            <div style="padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 8px; text-align: left;">
+              <div style="color: #e5e7eb; font-weight: 500; font-size: 0.9rem;">${foto.filename}</div>
+              <div style="color: #22c55e; font-size: 0.85rem; margin-top: 4px;">Sincronizada</div>
+              ${foto.driveUrl ? `<a href="${foto.driveUrl}" target="_blank" style="color: #3b82f6; font-size: 0.85rem; text-decoration: none;">Ver en Drive →</a>` : ''}
+            </div>
+          `;
+        });
+        listHtml += '</div>';
+      }
+      
+      if (pending.length === 0 && synced.length === 0) {
+        listHtml = '<p style="color: #94a3b8; text-align: center; padding: 20px;">No hay fotos guardadas</p>';
+      }
+      
+      const modal = createModal(`
+        <div style="padding: 24px;">
+          <h3 style="color: #e5e7eb; margin: 0 0 20px 0; font-size: 1.3rem; font-weight: 600; text-align: center;">Fotos guardadas</h3>
+          <div style="max-height: 400px; overflow-y: auto;">
+            ${listHtml}
+          </div>
+          <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
+            ${pending.length > 0 && isOnline ? `
+              <button onclick="closeModal(); syncPendingFotos();" style="
+                padding: 10px 20px; background: #3b82f6; color: white; 
+                border: none; border-radius: 6px; cursor: pointer; font-weight: 500;
+              ">
+                Sincronizar ahora
+              </button>
+            ` : ''}
+            <button onclick="closeModal()" style="
+              padding: 10px 20px; background: #374151; color: #e5e7eb; 
+              border: none; border-radius: 6px; cursor: pointer; font-weight: 500;
+            ">
+              Cerrar
+            </button>
+          </div>
+        </div>
+      `);
+    }
+    
+    async function getAllSyncedFotos() {
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readonly');
+        const objectStore = transaction.objectStore(STORE_NAME);
+        const index = objectStore.index('status');
+        const request = index.getAll('synced');
+        
+        request.onsuccess = () => {
+          const fotos = request.result;
+          fotos.sort((a, b) => new Date(b.syncedAt) - new Date(a.syncedAt));
+          resolve(fotos);
+        };
+        
+        request.onerror = () => {
+          reject(request.error);
+        };
+      });
     }
     
     function focusField(elementId) {
