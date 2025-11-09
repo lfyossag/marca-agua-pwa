@@ -206,11 +206,13 @@
           }
         });
       `;
-      // ServiceWorker deshabilitado temporalmente para evitar errores en GitHub Pages
-      // if('serviceWorker' in navigator && location.protocol === 'https:'){
-      //   const swUrl=URL.createObjectURL(new Blob([swCode],{type:'text/javascript'}));
-      //   navigator.serviceWorker.register(swUrl).catch(console.error);
-      // }
+      // Registrar ServiceWorker para funcionalidad offline completa
+      if('serviceWorker' in navigator){
+        const swUrl=URL.createObjectURL(new Blob([swCode],{type:'text/javascript'}));
+        navigator.serviceWorker.register(swUrl)
+          .then(reg => console.log('✅ Service Worker registrado'))
+          .catch(err => console.warn('⚠️ Error registrando SW:', err));
+      }
 
       let deferredPrompt=null;
       const installBtn=document.getElementById('installBtn');
