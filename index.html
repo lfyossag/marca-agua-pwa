@@ -64,16 +64,16 @@
         <label for="fecha">Fecha *</label>
         <input id="fecha" type="datetime-local" required />
 
-        <!-- Área -->
+        <!-- Contratista -->
+        <label for="contratista">Contratista *</label>
+        <select id="contratista" required>
+          <option value="">Selecciona un contratista...</option>
+        </select>
+
+        <!-- Área (dependiente del contratista) -->
         <label for="area">Área *</label>
-        <select id="area" required>
-          <option value="">Selecciona un área...</option>
-          <option value="Túnel Grúa Puente">Túnel Grúa Puente</option>
-          <option value="Casa de Máquinas">Casa de Máquinas</option>
-          <option value="Transformador">Transformador</option>
-          <option value="Vertedero">Vertedero</option>
-          <option value="Embalse">Embalse</option>
-          <option value="Obra de Toma">Obra de Toma</option>
+        <select id="area" required disabled>
+          <option value="">Primero selecciona un contratista</option>
         </select>
 
         <!-- Frente (dependiente del área) -->
@@ -113,9 +113,8 @@
                 <label for="quality">Calidad imagen: <span id="qualityVal">85%</span></label>
                 <input id="quality" type="range" min="60" max="95" step="5" value="85" />
               </div>
-              <div>
-                <label for="maxWidth">Ancho máximo (px)</label>
-                <input id="maxWidth" type="number" value="1920" min="800" max="4000" step="100" />
+              <div style="display: flex; align-items: center; color: #94a3b8; font-size: 0.85rem; padding-top: 20px;">
+                📐 Tamaño fijo: 1600×1200px máx.
               </div>
             </div>
             <div class="row">
@@ -252,10 +251,11 @@
   <script>
     const $=(id)=>document.getElementById(id);
     const fileEl=$("file"), fechaCreacionEl=$("fechaCreacion"), fechaEl=$("fecha"),
-          areaEl=$("area"), frenteEl=$("frente"), descripcionFotoEl=$("descripcionFoto"),
-          observacionesEl=$("observaciones"), positionEl=$("position"), fontSizeEl=$("fontSize"),
+          contratistaEl=$("contratista"), areaEl=$("area"), frenteEl=$("frente"), 
+          descripcionFotoEl=$("descripcionFoto"), observacionesEl=$("observaciones"), 
+          positionEl=$("position"), fontSizeEl=$("fontSize"),
           opacityEl=$("opacity"), opacityVal=$("opacityVal"), rotationEl=$("rotation"),
-          qualityEl=$("quality"), qualityVal=$("qualityVal"), maxWidthEl=$("maxWidth"),
+          qualityEl=$("quality"), qualityVal=$("qualityVal"),
           btnPreview=$("btnPreview"), btnProcess=$("btnProcess"), btnClear=$("btnClear"),
           canvas=$("canvas"), ctx=canvas.getContext("2d"),
           infoDim=$("infoDim"), infoSize=$("infoSize"), infoName=$("infoName"),
@@ -264,8 +264,8 @@
     // URL del Google Apps Script
     const GAS_URL = 'https://script.google.com/a/macros/sedic.com.co/s/AKfycbwb-1q2Rd4TBxL5GDDMzc3PL9lkKuy3VIPOWw67bKvwH4oh6yoCmAa46UqJWY75G612/exec';
     
-    // Configuración de áreas y frentes (se cargará dinámicamente)
-    let areasFrentes = {};
+    // Datos jerárquicos: Contratista → Área → Frentes + driveId
+    let contratistaData = {};
     
     // Base de datos IndexedDB
     let db = null;
@@ -671,17 +671,41 @@
       }
     })();
     
-    // Cargar áreas y frentes desde la base de datos
-    loadAreasFromSheets();
+    // Cargar contratistas, áreas y frentes desde la base de datos
+    loadContratistasFromSheets();
+    
+    // Manejar cambio de contratista
+    contratistaEl.addEventListener('change', ()=>{
+      const contratista = contratistaEl.value;
+      areaEl.innerHTML = '<option value="">Selecciona un área...</option>';
+      frenteEl.innerHTML = '<option value="">Primero selecciona un área</option>';
+      frenteEl.disabled = true;
+      
+      if(contratista && contratistaData[contratista]){
+        areaEl.disabled = false;
+        const areas = Object.keys(contratistaData[contratista]);
+        areas.forEach(area => {
+          const option = document.createElement('option');
+          option.value = area;
+          option.textContent = area;
+          areaEl.appendChild(option);
+        });
+      } else {
+        areaEl.disabled = true;
+        areaEl.innerHTML = '<option value="">Primero selecciona un contratista</option>';
+      }
+    });
     
     // Manejar cambio de área
     areaEl.addEventListener('change', ()=>{
+      const contratista = contratistaEl.value;
       const area = areaEl.value;
       frenteEl.innerHTML = '<option value="">Selecciona un frente...</option>';
       
-      if(area && areasFrentes[area]){
+      if(contratista && area && contratistaData[contratista]?.[area]){
         frenteEl.disabled = false;
-        areasFrentes[area].forEach(frente => {
+        const frentes = contratistaData[contratista][area].frentes;
+        frentes.forEach(frente => {
           const option = document.createElement('option');
           option.value = frente;
           option.textContent = frente;
@@ -708,6 +732,7 @@
     });
 
     // Actualizar nombre de archivo cuando cambien los campos
+    contratistaEl.addEventListener('change', updateFilename);
     frenteEl.addEventListener('change', updateFilename);
     descripcionFotoEl.addEventListener('input', updateFilename);
     fechaEl.addEventListener('change', updateFilename);
@@ -747,6 +772,7 @@
         const formData = {
           fechaCreacion: fechaCreacionEl.value,
           fecha: fechaISO,
+          contratista: contratistaEl.value,
           area: areaEl.value,
           frente: frenteEl.value,
           descripcionFoto: descripcionFotoEl.value,
@@ -758,6 +784,7 @@
         console.log('📋 Datos preparados para envío:', {
           fechaCreacion: formData.fechaCreacion,
           fecha: formData.fecha,
+          contratista: formData.contratista,
           area: formData.area,
           frente: formData.frente,
           descripcionFoto: formData.descripcionFoto,
@@ -842,7 +869,9 @@
       // Limpiar formulario
       fileEl.value=''; 
       fechaEl.value = getBogotaDateTimeForInput(); // Usar función de Bogotá
+      contratistaEl.value='';
       areaEl.value='';
+      areaEl.disabled=true;
       frenteEl.value='';
       frenteEl.disabled=true;
       descripcionFotoEl.value='';
@@ -858,12 +887,40 @@
     });
 
     function baseName(name){ const dot=name.lastIndexOf('.'); return dot>-1?name.slice(0,dot):name; }
-    function sanitize(str){ return str.trim().replace(/\s+/g,' ').replace(/[^a-zA-Z0-9\s\-]/g,''); }
+    
+    function sanitize(str){ 
+      // Mapa de caracteres acentuados a sin acento
+      const acentos = {
+        'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
+        'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
+        'ñ': 'n', 'Ñ': 'N',
+        'ü': 'u', 'Ü': 'U'
+      };
+      
+      // Reemplazar acentos
+      let resultado = str.trim();
+      for (const [acento, sinAcento] of Object.entries(acentos)) {
+        resultado = resultado.replace(new RegExp(acento, 'g'), sinAcento);
+      }
+      
+      // Reemplazar múltiples espacios por uno solo y luego por guión bajo
+      resultado = resultado.replace(/\s+/g, '_');
+      
+      // Remover caracteres especiales excepto letras, números, guiones y espacios
+      resultado = resultado.replace(/[^a-zA-Z0-9_\-]/g, '');
+      
+      return resultado;
+    }
+    
     function humanSize(bytes){ const u=['B','KB','MB','GB']; let i=0,n=bytes; while(n>=1024&&i<u.length-1){n/=1024;i++;} return `${n.toFixed(1)} ${u[i]}`; }
     
     function validateForm(){
       if(!fechaEl.value){ 
         showValidationModal('Por favor selecciona una fecha', fechaEl); 
+        return false; 
+      }
+      if(!contratistaEl.value){ 
+        showValidationModal('Por favor selecciona un contratista', contratistaEl); 
         return false; 
       }
       if(!areaEl.value){ 
@@ -925,41 +982,41 @@
       });
     }
     
-    // Cargar áreas y frentes desde Google Sheets usando JSONP
-    async function loadAreasFromSheets(){
+    // Cargar contratistas, áreas y frentes desde Google Sheets usando JSONP
+    async function loadContratistasFromSheets(){
       try {
-        console.log('🔄 Intentando cargar áreas desde Sheets (JSONP)...');
+        console.log('🔄 Intentando cargar contratistas desde Sheets (JSONP)...');
         
-        const data = await loadAreasWithJSONP();
+        const data = await loadDataWithJSONP();
         
         if (data && data.success && data.data) {
-          areasFrentes = data.data;
-          populateAreaSelect();
-          console.log('✅ Áreas cargadas exitosamente desde Sheets:', Object.keys(areasFrentes));
+          contratistaData = data.data;
+          populateContratistaSelect();
+          console.log('✅ Contratistas cargados exitosamente desde Sheets:', Object.keys(contratistaData));
           return;
         } else {
           console.warn('⚠️ Respuesta no exitosa desde GAS');
         }
       } catch (error) {
-        console.error('❌ Error cargando áreas:', error);
+        console.error('❌ Error cargando contratistas:', error);
       }
       
       // Fallback: usar configuración estática
       console.log('🔄 Usando configuración por defecto...');
-      areasFrentes = {
-        "Túnel Grúa Puente": ["Túnel Norte", "Túnel Sur", "Grúa Puente Norte", "Grúa Puente Sur"],
-        "Casa de Máquinas": ["Casa de Máquinas Norte", "Casa de Máquinas Sur", "Turbina 1", "Turbina 2", "Generador 1", "Generador 2"],
-        "Transformador": ["Transformador Principal", "Transformador Auxiliar", "Patio de Maniobras"],
-        "Vertedero": ["Vertedero Principal", "Canal de Descarga", "Compuertas"],
-        "Embalse": ["Presa", "Coronamiento", "Talud Aguas Arriba", "Talud Aguas Abajo"],
-        "Obra de Toma": ["Rejillas", "Compuertas de Toma", "Túnel de Conducción"]
+      contratistaData = {
+        "AMI": {
+          "Ambiental": {
+            frentes: ["Cables de control, fuerza e instrumentación", "Conexión al STN, subestación, líneas de transmisión y equipos de conexión"],
+            driveId: "fallback_id"
+          }
+        }
       };
-      populateAreaSelect();
+      populateContratistaSelect();
       console.log('✅ Configuración por defecto aplicada');
     }
     
-    // Función JSONP para cargar áreas sin problemas de CORS
-    function loadAreasWithJSONP() {
+    // Función JSONP para cargar datos sin problemas de CORS
+    function loadDataWithJSONP() {
       return new Promise((resolve, reject) => {
         const callbackName = 'jsonp_callback_' + Math.round(100000 * Math.random());
         
@@ -972,7 +1029,7 @@
         
         // Crear script tag
         const script = document.createElement('script');
-        script.src = GAS_URL + '?action=getAreas&callback=' + callbackName;
+        script.src = GAS_URL + '?action=getContratistas&callback=' + callbackName;
         
         // Manejar errores
         script.onerror = function() {
@@ -995,23 +1052,23 @@
       });
     }
     
-    // Poblar select de áreas
-    function populateAreaSelect(){
-      console.log('🏗️ Poblando select de áreas...');
-      areaEl.innerHTML = '<option value="">Selecciona un área...</option>';
+    // Poblar select de contratistas
+    function populateContratistaSelect(){
+      console.log('🏗️ Poblando select de contratistas...');
+      contratistaEl.innerHTML = '<option value="">Selecciona un contratista...</option>';
       
-      const areas = Object.keys(areasFrentes);
-      console.log('📋 Áreas disponibles:', areas);
+      const contratistas = Object.keys(contratistaData);
+      console.log('📋 Contratistas disponibles:', contratistas);
       
-      areas.forEach(area => {
+      contratistas.forEach(contratista => {
         const option = document.createElement('option');
-        option.value = area;
-        option.textContent = area;
-        areaEl.appendChild(option);
-        console.log(`➕ Área agregada: ${area}`);
+        option.value = contratista;
+        option.textContent = contratista;
+        contratistaEl.appendChild(option);
+        console.log(`➕ Contratista agregado: ${contratista}`);
       });
       
-      console.log(`✅ ${areas.length} áreas agregadas al select`);
+      console.log(`✅ ${contratistas.length} contratistas agregados al select`);
     }
 
     // Enviar datos a Google Apps Script usando método híbrido
@@ -1019,6 +1076,7 @@
       try {
         console.log('📤 Enviando datos a GAS:', {
           filename: data.filename,
+          contratista: data.contratista,
           area: data.area,
           frente: data.frente,
           descripcion: data.descripcionFoto,
@@ -1107,13 +1165,22 @@
       const img=loadedImg.image, rot=Number(rotationEl.value);
       let targetW=img.naturalWidth, targetH=img.naturalHeight;
       
-      // Redimensionar según configuración del usuario
-      const maxW = Number(maxWidthEl.value);
-      if(targetW > maxW){ 
-        const s=maxW/targetW; 
-        targetW=Math.round(targetW*s); 
-        targetH=Math.round(targetH*s); 
+      // Redimensionar proporcionalmente a máximo 1600x1200
+      const MAX_WIDTH = 1600;
+      const MAX_HEIGHT = 1200;
+      
+      // Calcular escala manteniendo proporción
+      let scale = 1;
+      if (targetW > MAX_WIDTH || targetH > MAX_HEIGHT) {
+        const scaleW = MAX_WIDTH / targetW;
+        const scaleH = MAX_HEIGHT / targetH;
+        scale = Math.min(scaleW, scaleH); // Usar la escala menor para que quepa en ambos límites
       }
+      
+      targetW = Math.round(targetW * scale);
+      targetH = Math.round(targetH * scale);
+      
+      console.log(`📐 Redimensión: ${img.naturalWidth}x${img.naturalHeight} → ${targetW}x${targetH} (escala: ${scale.toFixed(2)})`);
       
       const needsSwap=rot===90||rot===270;
       canvas.width=needsSwap?targetH:targetW; 
